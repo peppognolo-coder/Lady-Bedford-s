@@ -76,6 +76,31 @@ export interface Content {
   gallery: GalleryItem[] | null    // null = galleria originale
   invite: Partial<Record<'kicker' | 'line1' | 'line2' | 'address' | 'rsvp', L>>  // vuoto = testi originali
 }
+/* ---------- prenotazioni ---------- */
+export type BookingMode = 'required' | 'recommended' | 'free'   // necessaria · consigliata · accesso libero
+export interface BookingRule { id: string; label: string; from: string; to: string; yearly: boolean; mode: BookingMode }
+export interface BookingConfig {
+  enabled: boolean            // interruttore generale delle prenotazioni online
+  default_mode: BookingMode   // modalità nei periodi senza regola
+  rules: BookingRule[]        // periodi particolari (il primo che combacia vince)
+  slots: string[]             // orari prenotabili 'HH:MM'
+  capacity: number            // coperti contemporanei
+  duration_min: number        // quanto resta occupato un tavolo
+  max_party: number           // massimo ospiti per prenotazione
+  advance_days: number        // quanti giorni in anticipo si può prenotare
+  min_notice_h: number        // anticipo minimo in ore
+  auto_confirm: boolean       // conferma automatica (altrimenti la conferma lo staff)
+}
+export type BookingStatus = 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'seated' | 'noshow'
+export interface Booking {
+  id: string; ref: string; created_at: string
+  kind: string                // 'table' | 'tea' | id di un servizio (richiesta)
+  day: string; time: string | null; party: number; name: string; phone?: string | null; note?: string | null
+  status: BookingStatus; table_label?: string | null; source: 'app' | 'staff'
+}
+export interface NewBooking { kind: string; day: string; time?: string | null; party: number; name: string; phone?: string; note?: string }
+export interface BookingPublic { id: string; ref: string; status: BookingStatus; kind: string; day: string; time: string | null; party: number; name: string; table_label?: string | null }
+
 /** Chiusura di cassa di una giornata. */
 export interface Closure {
   day: string                // 'AAAA-MM-GG'
@@ -92,7 +117,7 @@ export interface Closure {
   closed_by: string          // 'cashier' | 'owner'
   closed_at: string
 }
-export interface Catalog { menu: MenuItem[]; services: Service[]; settings: Settings; content: Content }
+export interface Catalog { menu: MenuItem[]; services: Service[]; settings: Settings; content: Content; booking: BookingConfig }
 export interface OrderStatus { number: number; status: Status; payment_status: 'unpaid' | 'paid' }
 
 export interface Api {
@@ -119,6 +144,15 @@ export interface Api {
   listOrdersSince(from: Date, to?: Date): Promise<Order[]>
   /** Tutti i movimenti di scorta (per il backup). */
   listAllMoves(): Promise<StockMove[]>
+  // prenotazioni
+  saveBookingConfig(c: BookingConfig): Promise<void>
+  bookingAvailability(day: string): Promise<Record<string, number>>   // orario → posti liberi
+  placeBooking(b: NewBooking): Promise<BookingPublic>
+  bookingStatus(id: string): Promise<BookingPublic | null>
+  cancelBooking(id: string): Promise<void>
+  listBookings(from: string, to: string): Promise<Booking[]>          // staff
+  createStaffBooking(b: NewBooking): Promise<void>                    // staff: prenotazione telefonica
+  setBookingStatus(id: string, status: BookingStatus, table?: string | null): Promise<void>
   // chiusura di cassa (cassa e proprietà)
   getClosure(day: string): Promise<Closure | null>
   listClosures(limit?: number): Promise<Closure[]>

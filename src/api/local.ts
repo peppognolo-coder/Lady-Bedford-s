@@ -3,19 +3,31 @@ import { EMPTY_BACKOFFICE, consumption } from '../costs'
 import { demoBackoffice } from '../demoBackoffice'
 import { EMPTY_CONTENT } from '../content'
 import { toDataUrl } from '../image'
-import type { Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
+import { availability, checkBooking, DEFAULT_BOOKING } from '../booking'
+import type { Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
 
 // Modalità demo: tutto nel browser (localStorage), condiviso tra le schede dello stesso browser.
 const KEY = 'lb:demo:v2'
 const PINS: Record<Role, string> = { kitchen: '111111', cashier: '222222', waiter: '333333', owner: '44444444' }
-type DB = { closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
+type DB = { bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
 
 let mem: DB = { orders: [], seq: {}, catalog: DEFAULT_CATALOG, back: EMPTY_BACKOFFICE }
 const read = (): DB => {
   let found = false
-  try { const raw = localStorage.getItem(KEY); if (raw) { mem = JSON.parse(raw); found = true; if (!mem.catalog.content) mem.catalog = { ...mem.catalog, content: EMPTY_CONTENT } } } catch { /* usa memoria */ }
-  if (!found && window.__LB_DEMO?.seed) { mem = { ...mem, ...demoOrders(mem.catalog), back: demoBackoffice() }; try { localStorage.setItem(KEY, JSON.stringify(mem)) } catch { /* ignore */ } }
+  try { const raw = localStorage.getItem(KEY); if (raw) { mem = JSON.parse(raw); found = true; if (!mem.catalog.content) mem.catalog = { ...mem.catalog, content: EMPTY_CONTENT }; if (!mem.catalog.booking) mem.catalog = { ...mem.catalog, booking: DEFAULT_BOOKING } } } catch { /* usa memoria */ }
+  if (!found && window.__LB_DEMO?.seed) { mem = { ...mem, ...demoOrders(mem.catalog), back: demoBackoffice(), bookings: demoBookings() }; try { localStorage.setItem(KEY, JSON.stringify(mem)) } catch { /* ignore */ } }
   return mem
+}
+const demoBookings = (): Booking[] => {
+  const d = (n: number) => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+  const mk = (n: number, kind: string, day: string, time: string | null, party: number, name: string, status: Booking['status'], phone: string | null, note: string | null = null, table: string | null = null): Booking =>
+    ({ id: 'bk' + n, ref: 'DM' + String(n).padStart(3, '0'), created_at: new Date().toISOString(), kind, day, time, party, name, phone, note, status, table_label: table, source: 'app' })
+  return [
+    mk(1, 'tea', d(0), '16:00', 4, 'Famiglia Rossi', 'confirmed', '333 1112233', 'Compleanno: una candelina sulla torta', 'Tavolo 3'),
+    mk(2, 'table', d(0), '17:00', 2, 'Marta B.', 'pending', '347 5556677'),
+    mk(3, 'table', d(1), '12:30', 6, 'Studio Verdi', 'confirmed', '02 3344556', 'Una persona vegana'),
+    mk(4, 'party', d(9), null, 18, 'Chiara L.', 'pending', '339 8899001', 'Baby shower, sabato pomeriggio'),
+  ]
 }
 declare global { interface Window { __LB_DEMO?: { role?: Role; seed?: boolean } } }
 let memRole: Role | null = null
@@ -59,6 +71,7 @@ const dayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getM
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
 
 export function createLocalApi(): Api {
+  const pub = (b: Booking): BookingPublic => ({ id: b.id, ref: b.ref, status: b.status, kind: b.kind, day: b.day, time: b.time, party: b.party, name: b.name, table_label: b.table_label })
   const listeners = new Set<() => void>()
   const notify = () => listeners.forEach(f => f())
   const write = (db: DB) => { mem = db; try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { throw new Error('Spazio del browser esaurito: usa foto più piccole o meno foto (in produzione le foto vanno su Supabase).') } notify() }
@@ -121,6 +134,27 @@ export function createLocalApi(): Api {
       return read().orders.filter(o => new Date(o.created_at) >= t)
     },
     async listOrdersSince(from, to) { return read().orders.filter(o => new Date(o.created_at) >= from && (!to || new Date(o.created_at) < to)) },
+    async saveBookingConfig(c) { putCatalog(k => ({ ...k, booking: c })) },
+    async bookingAvailability(day) { const db = read(); return availability(db.catalog.booking, (db.bookings || []).filter(b => b.day === day)) },
+    async placeBooking(nb) {
+      const db = read(), list = db.bookings || []
+      const e = checkBooking(db.catalog.booking, db.catalog.settings.open_days, list, nb)
+      if (e) throw new Error(e)
+      if (!nb.name.trim()) throw new Error('Scrivi il tuo nome.')
+      const isSlot = nb.kind === 'table' || nb.kind === 'tea'
+      const b: Booking = { id: uid(), ref: uid().slice(0, 5).toUpperCase(), created_at: new Date().toISOString(), kind: nb.kind, day: nb.day, time: isSlot ? nb.time ?? null : null, party: nb.party, name: nb.name.trim().slice(0, 60), phone: nb.phone?.trim().slice(0, 30) || null, note: nb.note?.trim().slice(0, 300) || null, status: isSlot && db.catalog.booking.auto_confirm ? 'confirmed' : 'pending', table_label: null, source: 'app' }
+      write({ ...db, bookings: [...list, b] })
+      return pub(b)
+    },
+    async bookingStatus(id) { const b = (read().bookings || []).find(x => x.id === id); return b ? pub(b) : null },
+    async cancelBooking(id) { const db = read(); write({ ...db, bookings: (db.bookings || []).map(b => (b.id === id && (b.status === 'pending' || b.status === 'confirmed') ? { ...b, status: 'cancelled' as BookingStatus } : b)) }) },
+    async listBookings(from, to) { return (read().bookings || []).filter(b => b.day >= from && b.day <= to).sort((a, b) => (a.day + (a.time || '99')).localeCompare(b.day + (b.time || '99'))) },
+    async createStaffBooking(nb) {
+      const db = read(), isSlot = nb.kind === 'table' || nb.kind === 'tea'
+      const b: Booking = { id: uid(), ref: uid().slice(0, 5).toUpperCase(), created_at: new Date().toISOString(), kind: nb.kind, day: nb.day, time: isSlot ? nb.time ?? null : null, party: nb.party, name: nb.name.trim().slice(0, 60), phone: nb.phone?.trim() || null, note: nb.note?.trim() || null, status: 'confirmed', table_label: null, source: 'staff' }
+      write({ ...db, bookings: [...(db.bookings || []), b] })
+    },
+    async setBookingStatus(id, status, table) { const db = read(); write({ ...db, bookings: (db.bookings || []).map(b => (b.id === id ? { ...b, status, table_label: table === undefined ? b.table_label : table } : b)) }) },
     async getClosure(day) { return (read().closures || []).find(c => c.day === day) ?? null },
     async listClosures(limit = 60) { return [...(read().closures || [])].sort((a, b) => b.day.localeCompare(a.day)).slice(0, limit) },
     async saveClosure(c) { const db = read(); write({ ...db, closures: [...(db.closures || []).filter(x => x.day !== c.day), c] }) },

@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { DEFAULT_SETTINGS } from '../defaults'
 import { DEFAULT_COSTS } from '../costs'
 import { EMPTY_CONTENT } from '../content'
-import type { Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
+import { DEFAULT_BOOKING } from '../booking'
+import type { Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
 import { startOfToday } from './types'
 
 const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
@@ -30,11 +31,12 @@ export function createSupabaseApi(url: string, key: string): Api {
   return {
     mode: 'supabase',
     async getCatalog() {
-      const [m, sv, st, ct] = await Promise.all([
+      const [m, sv, st, ct, bk] = await Promise.all([
         sb.from('menu_items').select('*').order('sort'),
         sb.from('services').select('*').order('sort'),
         sb.from('settings').select('value').eq('key', 'main').maybeSingle(),
         sb.from('settings').select('value').eq('key', 'content').maybeSingle(),
+        sb.from('settings').select('value').eq('key', 'booking').maybeSingle(),
       ])
       fail(m.error); fail(sv.error); fail(st.error)
       const menu: MenuItem[] = (m.data || []).map(r => ({
@@ -48,7 +50,8 @@ export function createSupabaseApi(url: string, key: string): Api {
       }))
       const settings: Settings = { ...DEFAULT_SETTINGS, ...((st.data?.value as Partial<Settings>) || {}) }
       const content = { ...EMPTY_CONTENT, ...((ct.data?.value as Partial<Content>) || {}) }
-      return { menu, services, settings, content } as Catalog
+      const booking = { ...DEFAULT_BOOKING, ...((bk.data?.value as Partial<BookingConfig>) || {}) }
+      return { menu, services, settings, content, booking } as Catalog
     },
     placeOrder(o: NewOrder) {
       return create('place_order', { p_name: o.customer_name, p_slot: o.pickup_slot ?? null, p_note: o.note ?? null, p_items: o.items })
@@ -92,6 +95,27 @@ export function createSupabaseApi(url: string, key: string): Api {
         if (!data || data.length < 1000) break
       }
       return mapOrders(rows)
+    },
+    async saveBookingConfig(c) { const { error } = await sb.from('settings').upsert({ key: 'booking', value: c }); fail(error) },
+    async bookingAvailability(day) { const { data, error } = await sb.rpc('booking_availability', { p_day: day }); fail(error); return (data || {}) as Record<string, number> },
+    async placeBooking(b) {
+      const { data, error } = await sb.rpc('place_booking', { p_kind: b.kind, p_day: b.day, p_time: b.time ?? null, p_party: b.party, p_name: b.name, p_phone: b.phone ?? null, p_note: b.note ?? null })
+      fail(error); return data as BookingPublic
+    },
+    async bookingStatus(id) { const { data, error } = await sb.rpc('booking_status', { p_id: id }); fail(error); return (data as BookingPublic | null) ?? null },
+    async cancelBooking(id) { const { error } = await sb.rpc('cancel_booking', { p_id: id }); fail(error) },
+    async listBookings(from, to) {
+      const { data, error } = await sb.from('bookings').select('*').gte('day', from).lte('day', to).order('day').order('time', { nullsFirst: false })
+      fail(error); return (data || []) as Booking[]
+    },
+    async createStaffBooking(b) {
+      const { error } = await sb.rpc('staff_booking', { p_kind: b.kind, p_day: b.day, p_time: b.time ?? null, p_party: b.party, p_name: b.name, p_phone: b.phone ?? null, p_note: b.note ?? null })
+      fail(error)
+    },
+    async setBookingStatus(id, status, table) {
+      const patch: Record<string, unknown> = { status }
+      if (table !== undefined) patch.table_label = table
+      const { error } = await sb.from('bookings').update(patch).eq('id', id); fail(error)
     },
     async getClosure(day) {
       const { data, error } = await sb.from('cash_closures').select('*').eq('day', day).maybeSingle()
@@ -186,6 +210,7 @@ export function createSupabaseApi(url: string, key: string): Api {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredients' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, cb)
         .subscribe()
       return () => { void sb.removeChannel(ch) }
     },
