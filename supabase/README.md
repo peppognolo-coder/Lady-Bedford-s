@@ -53,3 +53,6 @@ Il PIN Cucina può scrivere ricette (anche nuove, come bozze nascoste a prezzo 0
 
 ### PIN
 Il PIN della **proprietà è di 8 cifre**, quello di cucina, sala e cassa di 6 (è la password dell'utente Supabase `{ruolo}@staff.ladybedford.app`). Quando crei l'utente `owner@staff.ladybedford.app` usa una password di 8 cifre non banali (non 12345678). Se cambi le lunghezze, aggiorna anche `PIN_LENGTH` in `src/api/types.ts`.
+
+## Personale e turni
+Visibili e modificabili **solo dalla proprietà** (scheda *Personale e turni*): persone con ruolo e ore da contratto, planner settimanale, assenze (riposo, ferie, permesso, malattia), straordinari e uscite anticipate, buchi di copertura e riepilogo ore. Tabelle `staff_members`, `staff_shifts`, `staff_config` con permessi riservati al ruolo `owner`: gli altri ruoli e gli anonimi non possono né leggerle né scriverle. Sono già in `01_schema.sql`: rieseguilo una volta. Personale e turni entrano anche nel backup completo e nel ripristino.
