@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { api, type PayMethod } from '../api'
 import { useCatalog, sortMenu } from '../catalog'
 import { CATS } from '../data'
-import { money } from './shared'
+import { money, useNow } from './shared'
+import { menuNow } from '../schedule'
 
 /** Comanda: usata dalla cassa (banco, può incassare) e dalla sala (tavolo fisso, solo invio in cucina). */
 export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier' | 'waiter'; table?: string; onSent: () => void; onCancel?: () => void }) {
@@ -14,7 +15,8 @@ export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier'
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const menu = sortMenu(catalog.menu.filter(m => m.visible))
+  useNow(60000)
+  const menu = menuNow(sortMenu(catalog.menu.filter(m => m.visible)), catalog.settings)
   const byId = Object.fromEntries(menu.map(m => [m.id, m]))
   const lines = Object.entries(cart).filter(([id]) => byId[id]).map(([id, q]) => ({ id, q, m: byId[id] }))
   const total = lines.reduce((a, l) => a + l.m.price * l.q, 0)
