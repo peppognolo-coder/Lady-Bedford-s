@@ -11,14 +11,17 @@ import ContentTab from './ContentTab'
 import PinsTab from './PinsTab'
 import BackupTab from './BackupTab'
 import ClosuresTab from './ClosuresTab'
+import BookingsTab, { useBookings } from './BookingsTab'
+import BookingConfigTab from './BookingConfigTab'
 import { AllergenChips } from './AllergenPicker'
 import { fromRecipe, sortAllergens } from '../allergens'
 import { ImagePicker } from './ImagePicker'
 
-type Tab = 'menu' | 'recipes' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'closures' | 'settings' | 'sales'
+type Tab = 'menu' | 'recipes' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales'
 
 export default function Owner({ onLogout }: { onLogout: () => void }) {
   const { catalog, reload } = useCatalog()
+  const bookings = useBookings()
   const [tab, setTab] = useState<Tab>('menu')
   const [flash, setFlash] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -27,12 +30,12 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
   const save = async (f: () => Promise<void>, ok = 'Salvato') => {
     try { setErr(null); await f(); await reload(); setFlash(ok); setTimeout(() => setFlash(null), 2200); return true } catch (e) { setErr((e as Error).message); return false }
   }
-  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Vendite']]
+  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Vendite']]
   return (
     <div className="st-shell">
       <header className="st-bar">
         <div className="st-brand"><span className="st-mono">LB</span><div><div className="st-kicker">Proprietà</div><div className="st-title">Gestione del locale</div></div></div>
-        <nav className="st-tabs" aria-label="Sezioni">{tabs.map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
+        <nav className="st-tabs" aria-label="Sezioni">{tabs.map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}{id === 'bookings' && bookings.pending > 0 && <i className="st-dot">{bookings.pending}</i>}</button>)}</nav>
         <div className="st-tools"><button className="st-ghost" onClick={onLogout}>Esci</button></div>
       </header>
       {err && <div className="st-alert" role="alert">{err}</div>}
@@ -44,6 +47,8 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
         {tab === 'costs' && <CostsTab onPriceSaved={() => void reload()} />}
         {tab === 'services' && <ServicesTab services={catalog.services} save={save} />}
         {tab === 'content' && <ContentTab key={JSON.stringify(catalog.content).length} catalog={catalog} save={save} />}
+        {tab === 'bookings' && <BookingsTab bookings={bookings} />}
+        {tab === 'bookingrules' && <BookingConfigTab catalog={catalog} save={save} />}
         {tab === 'closures' && <ClosuresTab />}
         {tab === 'backup' && <BackupTab />}
         {tab === 'pins' && <PinsTab />}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useCatalog } from '../catalog'
 import { type Order } from '../api'
 import Pos from './Pos'
+import BookingsTab, { useBookings } from './BookingsTab'
 import { Availability, OrderHeader, money, serveOrder, tableName, useBeep, useNow, useOrders } from './shared'
 
 const STATUS_LABEL = { new: 'In coda', preparing: 'In preparazione', ready: 'Pronto da servire', served: 'Servito', completed: 'Chiuso', cancelled: 'Annullato' } as const
@@ -20,7 +21,8 @@ export default function Waiter({ onLogout }: { onLogout: () => void }) {
   const { catalog } = useCatalog()
   const { orders, error, reload } = useOrders(undefined, () => beep.play())
   const now = useNow(15000)
-  const [tab, setTab] = useState<'tables' | 'out'>('tables')
+  const bookings = useBookings()
+  const [tab, setTab] = useState<'tables' | 'book' | 'out'>('tables')
   const [table, setTable] = useState<number | null>(null)
   const [ordering, setOrdering] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -37,6 +39,7 @@ export default function Waiter({ onLogout }: { onLogout: () => void }) {
         <div className="st-brand"><span className="st-mono">LB</span><div><div className="st-kicker">Sala</div><div className="st-title">{table ? tableName(table) : toServe ? `${toServe} da servire` : 'Tavoli'}</div></div></div>
         <nav className="st-tabs" aria-label="Sezioni">
           <button aria-pressed={tab === 'tables'} onClick={() => { setTab('tables'); setOrdering(false) }}>Tavoli{toServe > 0 && <i className="st-dot">{toServe}</i>}</button>
+          <button aria-pressed={tab === 'book'} onClick={() => setTab('book')}>Prenotazioni{bookings.pending > 0 && <i className="st-dot">{bookings.pending}</i>}</button>
           <button aria-pressed={tab === 'out'} onClick={() => setTab('out')}>Esaurito</button>
         </nav>
         <div className="st-tools">
@@ -48,6 +51,7 @@ export default function Waiter({ onLogout }: { onLogout: () => void }) {
 
       <main className="st-main">
         {tab === 'out' && <Availability />}
+        {tab === 'book' && <BookingsTab bookings={bookings} />}
         {tab === 'tables' && table === null && (
           <div className="st-pane wide">
             <div className="st-tables">
