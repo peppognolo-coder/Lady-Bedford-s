@@ -332,3 +332,13 @@ html.is-staff,html.is-staff body{background:var(--color-bg)}
   .st-modal-panel{border-radius:var(--radius-md) var(--radius-md) 0 0;max-height:92dvh;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
   .st-weeklabel{font-size:16px}
 }
+
+/* iOS Safari: i campi data/ora ignorano la larghezza e escono dal riquadro */
+input[type="date"],input[type="time"],input[type="datetime-local"],input[type="month"],input[type="week"]{
+  -webkit-appearance:none;appearance:none;box-sizing:border-box;display:block;min-width:0;max-width:100%;
+  text-align:left;line-height:1.2;
+}
+input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value,input[type="datetime-local"]::-webkit-date-and-time-value{text-align:left;min-height:1.2em;margin:0}
+input[type="date"]::-webkit-calendar-picker-indicator,input[type="time"]::-webkit-calendar-picker-indicator{margin-inline-start:auto}
+.st-field input,.st-field select,.st-field textarea,.st-input-sm{box-sizing:border-box;max-width:100%;min-width:0}
+.st-sheet,.st-form,.st-field{min-width:0}
