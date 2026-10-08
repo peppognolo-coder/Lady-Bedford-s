@@ -1,0 +1,30 @@
+{
+  "name": "Lady Bedford’s · Sala",
+  "short_name": "LB Sala",
+  "description": "Sezione Sala della sala da tè.",
+  "lang": "it",
+  "start_url": "./sala.html",
+  "scope": "./",
+  "id": "./sala.html",
+  "display": "standalone",
+  "background_color": "#1e423a",
+  "theme_color": "#1e423a",
+  "icons": [
+    {
+      "src": "icons/sala-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/sala-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/sala-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

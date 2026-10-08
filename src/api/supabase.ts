@@ -1,0 +1,149 @@
+import { createClient } from '@supabase/supabase-js'
+import { DEFAULT_SETTINGS } from '../defaults'
+import { DEFAULT_COSTS } from '../costs'
+import type { Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings } from './types'
+import { startOfToday } from './types'
+
+const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
+const num = (v: unknown) => Number(v)
+
+type Row = Record<string, unknown> & { total: unknown; order_items?: { item_id: string; name: string; cat: string; qty: number; unit_price: unknown }[] }
+const mapOrders = (rows: Row[]) => rows.map(r => ({
+  ...r, total: num(r.total),
+  items: (r.order_items || []).map(i => ({ ...i, unit_price: num(i.unit_price) })),
+})) as unknown as Order[]
+
+export function createSupabaseApi(url: string, key: string): Api {
+  const sb = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } })
+  const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message) }
+
+  const create = async (fn: 'place_order' | 'staff_place_order', args: Record<string, unknown>) => {
+    const { data, error } = await sb.rpc(fn, args)
+    fail(error)
+    return data as { id: string; number: number }
+  }
+
+  return {
+    mode: 'supabase',
+    async getCatalog() {
+      const [m, sv, st] = await Promise.all([
+        sb.from('menu_items').select('*').order('sort'),
+        sb.from('services').select('*').order('sort'),
+        sb.from('settings').select('value').eq('key', 'main').maybeSingle(),
+      ])
+      fail(m.error); fail(sv.error); fail(st.error)
+      const menu: MenuItem[] = (m.data || []).map(r => ({
+        id: r.id, cat: r.cat, price: num(r.price), vg: r.vg, available: r.available, visible: r.visible, sort: r.sort,
+        name: { it: r.name_it, en: r.name_en }, desc: { it: r.desc_it, en: r.desc_en },
+      }))
+      const services: Service[] = (sv.data || []).map(r => ({
+        id: r.id, active: r.active, sort: r.sort,
+        kicker: { it: r.kicker_it, en: r.kicker_en }, title: { it: r.title_it, en: r.title_en }, body: { it: r.body_it, en: r.body_en },
+        price: { it: r.price_it, en: r.price_en }, cta: { it: r.cta_it, en: r.cta_en },
+      }))
+      const settings: Settings = { ...DEFAULT_SETTINGS, ...((st.data?.value as Partial<Settings>) || {}) }
+      return { menu, services, settings } as Catalog
+    },
+    placeOrder(o: NewOrder) {
+      return create('place_order', { p_name: o.customer_name, p_slot: o.pickup_slot ?? null, p_note: o.note ?? null, p_items: o.items })
+    },
+    async orderStatus(id) {
+      const { data, error } = await sb.rpc('order_status', { p_id: id })
+      fail(error)
+      return (data as { number: number; status: never; payment_status: never } | null) ?? null
+    },
+    async staffRole() {
+      const { data: s } = await sb.auth.getSession()
+      if (!s.session) return null
+      const { data } = await sb.from('staff_roles').select('role').eq('user_id', s.session.user.id).maybeSingle()
+      return (data?.role as Role) ?? null
+    },
+    async staffLogin(role, pin) {
+      const { error } = await sb.auth.signInWithPassword({ email: staffEmail(role), password: pin })
+      if (error) throw new Error('PIN non valido')
+      const r = await this.staffRole()
+      if (r !== role) { await sb.auth.signOut(); throw new Error('Account senza permessi') }
+      return role
+    },
+    async staffLogout() { await sb.auth.signOut() },
+    async listOrders() {
+      const { data, error } = await sb.from('orders').select('*, order_items(*)').gte('created_at', startOfToday().toISOString()).order('created_at')
+      fail(error)
+      return mapOrders(data || [])
+    },
+    createCounterOrder(o) {
+      return create('staff_place_order', { p_name: o.customer_name, p_table: o.table_label ?? null, p_note: o.note ?? null, p_items: o.items, p_pay: o.pay ?? null })
+    },
+    async listOrdersSince(from) {
+      const { data, error } = await sb.from('orders').select('*, order_items(*)').gte('created_at', from.toISOString()).order('created_at').limit(5000)
+      fail(error)
+      return mapOrders(data || [])
+    },
+    async setStatus(id, status) { const { error } = await sb.from('orders').update({ status }).eq('id', id); fail(error) },
+    async setPayment(id, method) { const { error } = await sb.from('orders').update({ payment_method: method, payment_status: 'paid' }).eq('id', id); fail(error) },
+    async setAvailability(itemId, available) { const { error } = await sb.from('menu_items').update({ available }).eq('id', itemId); fail(error) },
+    async saveMenuItem(i) {
+      const { error } = await sb.from('menu_items').upsert({
+        id: i.id, cat: i.cat, price: i.price, vg: i.vg, available: i.available, visible: i.visible, sort: i.sort,
+        name_it: i.name.it, name_en: i.name.en, desc_it: i.desc.it, desc_en: i.desc.en,
+      })
+      fail(error)
+    },
+    async saveService(v) {
+      const { error } = await sb.from('services').upsert({
+        id: v.id, active: v.active, sort: v.sort,
+        kicker_it: v.kicker.it, kicker_en: v.kicker.en, title_it: v.title.it, title_en: v.title.en, body_it: v.body.it, body_en: v.body.en,
+        price_it: v.price.it, price_en: v.price.en, cta_it: v.cta.it, cta_en: v.cta.en,
+      })
+      fail(error)
+    },
+    async saveSettings(st) { const { error } = await sb.from('settings').upsert({ key: 'main', value: st }); fail(error) },
+    async getBackoffice() {
+      const [ing, rec, mv, co] = await Promise.all([
+        sb.from('ingredients').select('*').order('name'),
+        sb.from('recipes').select('*'),
+        sb.from('stock_moves').select('*').order('at', { ascending: false }).limit(300),
+        sb.from('owner_settings').select('value').eq('key', 'costs').maybeSingle(),
+      ])
+      fail(ing.error); fail(rec.error); fail(mv.error); fail(co.error)
+      return {
+        ingredients: (ing.data || []).map((r): Ingredient => ({ id: r.id, name: r.name, unit: r.unit, pack_qty: num(r.pack_qty), pack_price: num(r.pack_price), stock: num(r.stock), min_stock: num(r.min_stock), supplier: r.supplier ?? undefined })),
+        recipes: (rec.data || []).map((r): Recipe => ({ item_id: r.item_id, yield: num(r.yield), lines: (r.lines as Recipe['lines']) || [], notes: r.notes ?? undefined, method: r.method ?? undefined, prep_min: r.prep_min ?? undefined })),
+        moves: (mv.data || []).map((r): StockMove => ({ id: String(r.id), ingredient_id: r.ingredient_id, delta: num(r.delta), reason: r.reason, note: r.note ?? undefined, at: r.at })),
+        costs: { ...DEFAULT_COSTS, ...((co.data?.value as Partial<Costs>) || {}) },
+      } as Backoffice
+    },
+    async saveIngredient(i) {
+      const { data, error: e0 } = await sb.from('ingredients').select('id').eq('id', i.id).maybeSingle()
+      fail(e0)
+      // la giacenza non si scrive direttamente: si muove con set_stock
+      const { error } = await sb.from('ingredients').upsert({ id: i.id, name: i.name, unit: i.unit, pack_qty: i.pack_qty, pack_price: i.pack_price, min_stock: i.min_stock, supplier: i.supplier ?? null })
+      fail(error)
+      if (!data && i.stock) { const r = await sb.rpc('set_stock', { p_id: i.id, p_qty: i.stock, p_note: 'Giacenza iniziale' }); fail(r.error) }
+    },
+    async deleteIngredient(id) { const { error } = await sb.from('ingredients').delete().eq('id', id); fail(error) },
+    async addIngredient(name, unit) {
+      const { data, error } = await sb.rpc('add_ingredient', { p_name: name, p_unit: unit }); fail(error)
+      return { id: data as string, name: name.trim(), unit, pack_qty: 1, pack_price: 0, stock: 0, min_stock: 0 }
+    },
+    async createDraftItem(name, cat) {
+      const { data, error } = await sb.rpc('create_draft_item', { p_name: name, p_cat: cat }); fail(error)
+      return { id: data as string, cat, price: 0, vg: false, available: true, visible: false, sort: 999, name: { it: name.trim(), en: name.trim() }, desc: { it: '', en: '' } }
+    },
+    async saveRecipe(r) { const { error } = await sb.from('recipes').upsert({ item_id: r.item_id, yield: r.yield, lines: r.lines, notes: r.notes ?? null, method: r.method ?? null, prep_min: r.prep_min ?? null }); fail(error) },
+    async deleteRecipe(itemId) { const { error } = await sb.from('recipes').delete().eq('item_id', itemId); fail(error) },
+    async saveCosts(c) { const { error } = await sb.from('owner_settings').upsert({ key: 'costs', value: c }); fail(error) },
+    async moveStock(id, delta, reason, note) { const { error } = await sb.rpc('move_stock', { p_id: id, p_delta: delta, p_reason: reason, p_note: note ?? null }); fail(error) },
+    async setStock(id, qty, note) { const { error } = await sb.rpc('set_stock', { p_id: id, p_qty: qty, p_note: note ?? null }); fail(error) },
+    subscribe(cb) {
+      const ch = sb.channel('lb-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredients' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, cb)
+        .subscribe()
+      return () => { void sb.removeChannel(ch) }
+    },
+  }
+}
