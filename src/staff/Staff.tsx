@@ -70,6 +70,11 @@ export default function Staff() {
   const [ready, setReady] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   useEffect(() => { api.staffRole().then(r => { setRole(r); setReady(true) }).catch(() => setReady(true)) }, [])
+  // sfondo chiaro anche nelle barre di Safari/iOS (niente fasce grigie)
+  useEffect(() => {
+    document.documentElement.classList.add('is-staff')
+    return () => document.documentElement.classList.remove('is-staff')
+  }, [])
 
   const out = useCallback(async (msg?: string) => { await api.staffLogout().catch(() => undefined); setRole(null); setNote(msg ?? null) }, [])
   useIdle(role && !(window as { __LB_DEMO?: unknown }).__LB_DEMO ? LOCK_BY_ROLE[role] : 0, !!role, () => void out('Bloccato per inattività: inserisci di nuovo il PIN.'))

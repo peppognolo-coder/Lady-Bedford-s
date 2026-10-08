@@ -227,7 +227,13 @@ html,body{overscroll-behavior:none}
 .st-secbar span{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-800);margin-right:6px;white-space:nowrap}
 .st-secbar button{min-height:36px;padding:0 14px;border:1px solid var(--color-divider);border-radius:18px;background:var(--color-bg);font:inherit;font-size:14px;cursor:pointer;white-space:nowrap}
 .st-secbar button[aria-pressed=true]{border-color:var(--color-accent);color:var(--color-accent-700);font-weight:600}
-@media (max-width:420px){.st-hub-grid{grid-template-columns:1fr}.st-hub-card{min-height:110px}}
+html.is-staff,html.is-staff body{background:var(--color-bg)}
+@media (max-width:520px){
+  .st-hub{gap:12px}
+  .st-hub-card{min-height:120px;padding:12px 8px;gap:4px}
+  .st-hub-name{font-size:22px}
+  .st-hub-desc{font-size:12px}
+}
 
 /* numeri sempre alla stessa altezza (il font dei titoli ha cifre "basse": lo 0 sembrava una o) */
 .st-title,.st-colhead,.st-h1,.st-h2,.st-h3,.st-sum{font-variant-numeric:lining-nums tabular-nums}
