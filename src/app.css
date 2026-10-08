@@ -45,3 +45,7 @@ input::placeholder{color:var(--color-neutral-500)}
 .tabbar button{background:transparent;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;font-size:10px;color:var(--color-neutral-700)}
 .tabbar button[aria-current=page]{color:var(--lb-green-700)}
 :focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+
+/* iOS Safari: campi data/ora dentro la larghezza del riquadro */
+input[type="date"],input[type="time"],input[type="datetime-local"]{-webkit-appearance:none;appearance:none;box-sizing:border-box;min-width:0;max-width:100%;text-align:left}
+input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left}
