@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { api, type OrderStatus } from './api'
 import { useCatalog, sortMenu, hoursLabel, isOpenNow } from './catalog'
 import { ALLERGENS, allergenName } from './allergens'
+import BookingDialog, { MyBooking } from './BookingDialog'
+import { MODE_LABEL, isoDay, modeFor } from './booking'
 import { chaptersOf, galleryOf, galleryH, imageOf } from './content'
 import type { Content } from './api/types'
 import { TX, CATS, TABS, IMG, eur, type Lang, type Screen } from './data'
@@ -66,9 +68,6 @@ export default function App() {
   const [slot, setSlot] = useState(1)
   const [nameTouched, setNameTouched] = useState(false)
   const [dialog, setDialog] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
-  const [day, setDay] = useState(0)
-  const [guests, setGuests] = useState(2)
   const [toast, setToast] = useState<string | null>(null)
   const [last, setLast] = useState({ total: 0, slot: '' })
   const { catalog, loaded: catLoaded, reload: reloadCatalog } = useCatalog()
@@ -259,12 +258,18 @@ export default function App() {
                 <span className="h-serif" style={{ fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>{t.homeOrder}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-700)' }}>{t.homeOrderSub}</span>
               </button>
-              <button className="tile" onClick={() => go('services')} style={tile('var(--color-divider)')}>
+              <button className="tile" onClick={() => (catalog.booking.enabled ? setDialog('tea') : go('services'))} style={tile('var(--color-divider)')}>
                 <span style={{ color: 'var(--color-accent-700)' }}><Icon n="cup" size={20} /></span>
                 <span className="h-serif" style={{ fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>{t.homeTea}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-700)' }}>{t.homeTeaSub}</span>
               </button>
             </div>
+            <MyBooking lang={lang} />
+            {catalog.booking.enabled && (
+              <button className="link" style={{ textAlign: 'left', fontSize: 12.5 }} onClick={() => setDialog('table')}>
+                {MODE_LABEL[modeFor(catalog.booking, isoDay(new Date())).mode][lang]} · {lang === 'it' ? 'Prenota un tavolo' : 'Book a table'} →
+              </button>
+            )}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
                 <h2 className="h-serif" style={{ fontWeight: 600, fontSize: 21, margin: 0 }}>{t.homeToday}</h2>
@@ -411,6 +416,7 @@ export default function App() {
         {screen === 'services' && (
           <div className="fade" style={{ padding: '18px 20px 30px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p className="h-serif" style={{ margin: 0, fontStyle: 'italic', fontSize: 16, lineHeight: 1.4, color: 'var(--color-neutral-800)' }}>{t.servicesIntro}</p>
+            {catalog.booking.enabled && <button className="btn-o" style={{ height: 46 }} onClick={() => setDialog('table')}>{lang === 'it' ? 'Prenota un tavolo' : 'Book a table'}</button>}
             {catalog.services.filter(x => x.active).sort((x, y) => x.sort - y.sort).map(sv => ({ id: sv.id, kicker: sv.kicker[lang], title: sv.title[lang], body: sv.body[lang], price: sv.price[lang], cta: sv.cta[lang] })).map(s => (
               <article key={s.id} style={{ border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                 {imageOf(catalog.content, 'svc:' + s.id, IMG.svc[s.id]) && <div style={{ position: 'relative', height: 150, borderBottom: '1px solid var(--color-divider)' }}><img className="imgslot" src={imageOf(catalog.content, 'svc:' + s.id, IMG.svc[s.id])} alt={s.title} loading="lazy" /></div>}
@@ -420,7 +426,7 @@ export default function App() {
                   <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--color-neutral-800)', textAlign: 'justify', hyphens: 'auto' }}>{s.body}</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                     <span className="tnum" style={{ fontSize: 12.5 }}>{s.price}</span>
-                    <button className="btn-o sm" onClick={() => { setDialog(s.id); setSent(false) }}>{s.cta}</button>
+                    <button className="btn-o sm" onClick={() => setDialog(s.id)}>{s.cta}</button>
                   </div>
                 </div>
               </article>
@@ -566,58 +572,7 @@ export default function App() {
         </nav>
       )}
 
-      {dialog && (() => {
-        const svc = catalog.services.find(x => x.id === dialog)
-        if (!svc) return null
-        const svcTitle = svc.title[lang]
-        const today = new Date()
-        return (
-          <div onClick={() => setDialog(null)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'color-mix(in srgb, var(--color-neutral-900) 45%, transparent)', display: 'flex', alignItems: 'flex-end' }}>
-            <div role="dialog" aria-modal="true" aria-label={svcTitle} onClick={e => e.stopPropagation()} className="fade" style={{ width: '100%', background: 'var(--color-bg)', borderRadius: '22px 22px 0 0', padding: '22px 22px 28px', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-lg)' }}>
-              {sent ? (
-                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 12, padding: '10px 0' }}>
-                  <div className="kicker">{t.sentKicker}</div>
-                  <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 20, lineHeight: 1.35 }}>{t.sentBody}</div>
-                  <button className="btn-o sm" style={{ height: 46, fontSize: 16, marginTop: 6 }} onClick={() => setDialog(null)}>{t.close}</button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div>
-                      <div className="kicker">{t.requestKicker}</div>
-                      <div className="h-serif" style={{ fontWeight: 600, fontSize: 23, lineHeight: 1.15, marginTop: 4 }}>{svcTitle}</div>
-                    </div>
-                    <button className="circ" style={{ width: 36, height: 36 }} aria-label={t.close} onClick={() => setDialog(null)}><Icon n="close" size={15} /></button>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--color-neutral-700)', marginBottom: 8 }}>{t.day}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-                      {[0, 1, 2, 3].map(i => {
-                        const d = new Date(today); d.setDate(d.getDate() + i)
-                        return (
-                          <button key={i} className="choice" aria-pressed={i === day} onClick={() => setDay(i)} style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                            <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>{i === 0 ? t.dows[0] : d.toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB', { weekday: 'short' })}</span>
-                            <span className="h-serif tnum" style={{ fontSize: 21, fontWeight: 600 }}>{d.getDate()}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, color: 'var(--color-neutral-700)' }}>{t.guests}</span>
-                    <div className="stepper" style={{ height: 36, borderRadius: 18 }}>
-                      <button style={{ width: 38, height: 34 }} aria-label="−" onClick={() => setGuests(g => Math.max(1, g - 1))}><Icon n="minus" size={14} sw={1.6} /></button>
-                      <span style={{ minWidth: 22, fontSize: 14 }}>{guests}</span>
-                      <button style={{ width: 38, height: 34 }} aria-label="+" onClick={() => setGuests(g => Math.min(24, g + 1))}><Icon n="plus" size={14} sw={1.6} /></button>
-                    </div>
-                  </div>
-                  <button className="btn-o" style={{ height: 50, fontSize: 17 }} onClick={() => setSent(true)}>{t.sendRequest}</button>
-                </>
-              )}
-            </div>
-          </div>
-        )
-      })()}
+      {dialog && <BookingDialog kind={dialog} svcTitle={catalog.services.find(x => x.id === dialog)?.title[lang]} catalog={catalog} lang={lang} onClose={() => setDialog(null)} />}
 
       {toast && (
         <div role="status" className="fade" style={{ position: 'absolute', left: 20, right: 20, bottom: 100, zIndex: 15, background: 'var(--lb-green-900)', color: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 12.5, boxShadow: 'var(--shadow-md)' }}>

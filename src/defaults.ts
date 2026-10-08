@@ -1,5 +1,6 @@
 import type { Catalog, L, MenuItem, Service, Settings } from './api/types'
 import { EMPTY_CONTENT } from './content'
+import { DEFAULT_BOOKING } from './booking'
 import { DEMO_ITEM_ALLERGENS } from './allergens'
 import { MENU, SERVICES, SLOTS } from './data'
 
@@ -24,5 +25,6 @@ export const DEFAULT_CATALOG: Catalog = {
   }),
   settings: DEFAULT_SETTINGS,
   content: EMPTY_CONTENT,
+  booking: DEFAULT_BOOKING,
 }
 
