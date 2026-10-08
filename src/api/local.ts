@@ -1,17 +1,19 @@
 import { DEFAULT_CATALOG } from '../defaults'
 import { EMPTY_BACKOFFICE, consumption } from '../costs'
 import { demoBackoffice } from '../demoBackoffice'
-import type { Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
+import { EMPTY_CONTENT } from '../content'
+import { toDataUrl } from '../image'
+import type { Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
 
 // Modalità demo: tutto nel browser (localStorage), condiviso tra le schede dello stesso browser.
 const KEY = 'lb:demo:v2'
 const PINS: Record<Role, string> = { kitchen: '111111', cashier: '222222', waiter: '333333', owner: '44444444' }
-type DB = { orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
+type DB = { closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
 
 let mem: DB = { orders: [], seq: {}, catalog: DEFAULT_CATALOG, back: EMPTY_BACKOFFICE }
 const read = (): DB => {
   let found = false
-  try { const raw = localStorage.getItem(KEY); if (raw) { mem = JSON.parse(raw); found = true } } catch { /* usa memoria */ }
+  try { const raw = localStorage.getItem(KEY); if (raw) { mem = JSON.parse(raw); found = true; if (!mem.catalog.content) mem.catalog = { ...mem.catalog, content: EMPTY_CONTENT } } } catch { /* usa memoria */ }
   if (!found && window.__LB_DEMO?.seed) { mem = { ...mem, ...demoOrders(mem.catalog), back: demoBackoffice() }; try { localStorage.setItem(KEY, JSON.stringify(mem)) } catch { /* ignore */ } }
   return mem
 }
@@ -59,7 +61,7 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) 
 export function createLocalApi(): Api {
   const listeners = new Set<() => void>()
   const notify = () => listeners.forEach(f => f())
-  const write = (db: DB) => { mem = db; try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* ignore */ } notify() }
+  const write = (db: DB) => { mem = db; try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { throw new Error('Spazio del browser esaurito: usa foto più piccole o meno foto (in produzione le foto vanno su Supabase).') } notify() }
   window.addEventListener('storage', e => { if (e.key === KEY) notify() })
 
   const create = (o: NewOrder, source: 'app' | 'counter' | 'floor') => {
@@ -108,7 +110,7 @@ export function createLocalApi(): Api {
     },
     async staffRole() { return getRole() },
     async staffLogin(role, pin) {
-      if (pin !== PINS[role]) throw new Error('PIN non valido')
+      if (pin !== (read().pins?.[role] ?? PINS[role])) throw new Error('PIN non valido')
       memRole = role
       try { sessionStorage.setItem('lb:demo:role', role) } catch { /* ignore */ }
       return role
@@ -118,7 +120,11 @@ export function createLocalApi(): Api {
       const t = new Date(); t.setHours(0, 0, 0, 0)
       return read().orders.filter(o => new Date(o.created_at) >= t)
     },
-    async listOrdersSince(from) { return read().orders.filter(o => new Date(o.created_at) >= from) },
+    async listOrdersSince(from, to) { return read().orders.filter(o => new Date(o.created_at) >= from && (!to || new Date(o.created_at) < to)) },
+    async getClosure(day) { return (read().closures || []).find(c => c.day === day) ?? null },
+    async listClosures(limit = 60) { return [...(read().closures || [])].sort((a, b) => b.day.localeCompare(a.day)).slice(0, limit) },
+    async saveClosure(c) { const db = read(); write({ ...db, closures: [...(db.closures || []).filter(x => x.day !== c.day), c] }) },
+    async listAllMoves() { return read().back!.moves },
     async createCounterOrder(o) {
       const role = getRole()
       return create(o, role === 'waiter' ? 'floor' : o.source ?? 'counter')
@@ -147,6 +153,9 @@ export function createLocalApi(): Api {
     },
     async saveMenuItem(item) { putCatalog(c => ({ ...c, menu: upsert(c.menu, item) })) },
     async saveService(svc) { putCatalog(c => ({ ...c, services: upsert(c.services, svc) })) },
+    async setPin(role, pin) { const db = read(); write({ ...db, pins: { ...db.pins, [role]: pin } }) },
+    async saveContent(c) { putCatalog(k => ({ ...k, content: c })) },
+    async uploadImage(file) { return toDataUrl(file) },
     async saveSettings(st) { putCatalog(c => ({ ...c, settings: st })) },
     async getBackoffice() { return read().back! },
     async saveIngredient(i) { putBack(b => ({ ...b, ingredients: upsertBy(b.ingredients, i, x => x.id) })) },

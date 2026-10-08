@@ -1,13 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 import { DEFAULT_SETTINGS } from '../defaults'
 import { DEFAULT_COSTS } from '../costs'
-import type { Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings } from './types'
+import { EMPTY_CONTENT } from '../content'
+import type { Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
 import { startOfToday } from './types'
 
 const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
 const num = (v: unknown) => Number(v)
 
 type Row = Record<string, unknown> & { total: unknown; order_items?: { item_id: string; name: string; cat: string; qty: number; unit_price: unknown }[] }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapClosure = (r: Record<string, any>): Closure => ({ day: r.day, float_start: num(r.float_start), cash_total: num(r.cash_total), card_total: num(r.card_total), unpaid_total: num(r.unpaid_total), orders_count: r.orders_count, cancelled_count: r.cancelled_count, counted_cash: num(r.counted_cash), float_next: num(r.float_next), diff: num(r.diff), note: r.note ?? undefined, closed_by: r.closed_by, closed_at: r.closed_at })
 const mapOrders = (rows: Row[]) => rows.map(r => ({
   ...r, total: num(r.total),
   items: (r.order_items || []).map(i => ({ ...i, unit_price: num(i.unit_price) })),
@@ -26,15 +29,16 @@ export function createSupabaseApi(url: string, key: string): Api {
   return {
     mode: 'supabase',
     async getCatalog() {
-      const [m, sv, st] = await Promise.all([
+      const [m, sv, st, ct] = await Promise.all([
         sb.from('menu_items').select('*').order('sort'),
         sb.from('services').select('*').order('sort'),
         sb.from('settings').select('value').eq('key', 'main').maybeSingle(),
+        sb.from('settings').select('value').eq('key', 'content').maybeSingle(),
       ])
       fail(m.error); fail(sv.error); fail(st.error)
       const menu: MenuItem[] = (m.data || []).map(r => ({
         id: r.id, cat: r.cat, price: num(r.price), vg: r.vg, available: r.available, visible: r.visible, sort: r.sort,
-        name: { it: r.name_it, en: r.name_en }, desc: { it: r.desc_it, en: r.desc_en },
+        name: { it: r.name_it, en: r.name_en }, desc: { it: r.desc_it, en: r.desc_en }, photo: r.photo ?? null, allergens: r.allergens ?? null,
       }))
       const services: Service[] = (sv.data || []).map(r => ({
         id: r.id, active: r.active, sort: r.sort,
@@ -42,7 +46,8 @@ export function createSupabaseApi(url: string, key: string): Api {
         price: { it: r.price_it, en: r.price_en }, cta: { it: r.cta_it, en: r.cta_en },
       }))
       const settings: Settings = { ...DEFAULT_SETTINGS, ...((st.data?.value as Partial<Settings>) || {}) }
-      return { menu, services, settings } as Catalog
+      const content = { ...EMPTY_CONTENT, ...((ct.data?.value as Partial<Content>) || {}) }
+      return { menu, services, settings, content } as Catalog
     },
     placeOrder(o: NewOrder) {
       return create('place_order', { p_name: o.customer_name, p_slot: o.pickup_slot ?? null, p_note: o.note ?? null, p_items: o.items })
@@ -74,10 +79,39 @@ export function createSupabaseApi(url: string, key: string): Api {
     createCounterOrder(o) {
       return create('staff_place_order', { p_name: o.customer_name, p_table: o.table_label ?? null, p_note: o.note ?? null, p_items: o.items, p_pay: o.pay ?? null })
     },
-    async listOrdersSince(from) {
-      const { data, error } = await sb.from('orders').select('*, order_items(*)').gte('created_at', from.toISOString()).order('created_at').limit(5000)
+    async listOrdersSince(from, to) {
+      // Supabase restituisce al massimo 1000 righe per richiesta: si legge a pagine.
+      const rows: Row[] = []
+      for (let off = 0; ; off += 1000) {
+        let q = sb.from('orders').select('*, order_items(*)').gte('created_at', from.toISOString())
+        if (to) q = q.lt('created_at', to.toISOString())
+        const { data, error } = await q.order('created_at').order('id').range(off, off + 999)
+        fail(error)
+        rows.push(...((data || []) as Row[]))
+        if (!data || data.length < 1000) break
+      }
+      return mapOrders(rows)
+    },
+    async getClosure(day) {
+      const { data, error } = await sb.from('cash_closures').select('*').eq('day', day).maybeSingle()
       fail(error)
-      return mapOrders(data || [])
+      return data ? mapClosure(data) : null
+    },
+    async listClosures(limit = 60) {
+      const { data, error } = await sb.from('cash_closures').select('*').order('day', { ascending: false }).limit(limit)
+      fail(error)
+      return (data || []).map(mapClosure)
+    },
+    async saveClosure(c) { const { error } = await sb.from('cash_closures').upsert({ ...c, note: c.note ?? null }); fail(error) },
+    async listAllMoves() {
+      const out: StockMove[] = []
+      for (let off = 0; ; off += 1000) {
+        const { data, error } = await sb.from('stock_moves').select('*').order('at').order('id').range(off, off + 999)
+        fail(error)
+        out.push(...(data || []).map((r): StockMove => ({ id: String(r.id), ingredient_id: r.ingredient_id, delta: num(r.delta), reason: r.reason, note: r.note ?? undefined, at: r.at })))
+        if (!data || data.length < 1000) break
+      }
+      return out
     },
     async setStatus(id, status) { const { error } = await sb.from('orders').update({ status }).eq('id', id); fail(error) },
     async setPayment(id, method) { const { error } = await sb.from('orders').update({ payment_method: method, payment_status: 'paid' }).eq('id', id); fail(error) },
@@ -85,7 +119,7 @@ export function createSupabaseApi(url: string, key: string): Api {
     async saveMenuItem(i) {
       const { error } = await sb.from('menu_items').upsert({
         id: i.id, cat: i.cat, price: i.price, vg: i.vg, available: i.available, visible: i.visible, sort: i.sort,
-        name_it: i.name.it, name_en: i.name.en, desc_it: i.desc.it, desc_en: i.desc.en,
+        name_it: i.name.it, name_en: i.name.en, desc_it: i.desc.it, desc_en: i.desc.en, photo: i.photo ?? null, allergens: i.allergens ?? null,
       })
       fail(error)
     },
@@ -97,6 +131,14 @@ export function createSupabaseApi(url: string, key: string): Api {
       })
       fail(error)
     },
+    async setPin(role, pin) { const { error } = await sb.rpc('set_staff_pin', { p_role: role, p_pin: pin }); fail(error) },
+    async saveContent(c) { const { error } = await sb.from('settings').upsert({ key: 'content', value: c }); fail(error) },
+    async uploadImage(file, folder) {
+      const path = `${folder}/${crypto.randomUUID()}.webp`
+      const { error } = await sb.storage.from('media').upload(path, file, { contentType: file.type || 'image/webp', cacheControl: '31536000' })
+      fail(error)
+      return sb.storage.from('media').getPublicUrl(path).data.publicUrl
+    },
     async saveSettings(st) { const { error } = await sb.from('settings').upsert({ key: 'main', value: st }); fail(error) },
     async getBackoffice() {
       const [ing, rec, mv, co] = await Promise.all([
@@ -107,7 +149,7 @@ export function createSupabaseApi(url: string, key: string): Api {
       ])
       fail(ing.error); fail(rec.error); fail(mv.error); fail(co.error)
       return {
-        ingredients: (ing.data || []).map((r): Ingredient => ({ id: r.id, name: r.name, unit: r.unit, pack_qty: num(r.pack_qty), pack_price: num(r.pack_price), stock: num(r.stock), min_stock: num(r.min_stock), supplier: r.supplier ?? undefined })),
+        ingredients: (ing.data || []).map((r): Ingredient => ({ id: r.id, name: r.name, unit: r.unit, pack_qty: num(r.pack_qty), pack_price: num(r.pack_price), stock: num(r.stock), min_stock: num(r.min_stock), supplier: r.supplier ?? undefined, allergens: r.allergens ?? [] })),
         recipes: (rec.data || []).map((r): Recipe => ({ item_id: r.item_id, yield: num(r.yield), lines: (r.lines as Recipe['lines']) || [], notes: r.notes ?? undefined, method: r.method ?? undefined, prep_min: r.prep_min ?? undefined })),
         moves: (mv.data || []).map((r): StockMove => ({ id: String(r.id), ingredient_id: r.ingredient_id, delta: num(r.delta), reason: r.reason, note: r.note ?? undefined, at: r.at })),
         costs: { ...DEFAULT_COSTS, ...((co.data?.value as Partial<Costs>) || {}) },
@@ -117,7 +159,7 @@ export function createSupabaseApi(url: string, key: string): Api {
       const { data, error: e0 } = await sb.from('ingredients').select('id').eq('id', i.id).maybeSingle()
       fail(e0)
       // la giacenza non si scrive direttamente: si muove con set_stock
-      const { error } = await sb.from('ingredients').upsert({ id: i.id, name: i.name, unit: i.unit, pack_qty: i.pack_qty, pack_price: i.pack_price, min_stock: i.min_stock, supplier: i.supplier ?? null })
+      const { error } = await sb.from('ingredients').upsert({ id: i.id, name: i.name, unit: i.unit, pack_qty: i.pack_qty, pack_price: i.pack_price, min_stock: i.min_stock, supplier: i.supplier ?? null, allergens: i.allergens ?? [] })
       fail(error)
       if (!data && i.stock) { const r = await sb.rpc('set_stock', { p_id: i.id, p_qty: i.stock, p_note: 'Giacenza iniziale' }); fail(r.error) }
     },
