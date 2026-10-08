@@ -173,7 +173,7 @@
 .st-icon:hover:not(:disabled){border-color:var(--color-accent)}
 .st-sheet{border:1px solid var(--color-accent);border-radius:var(--radius-md);padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--color-bg)}
 .st-sheet.flat{border-color:var(--color-divider)}
-.st-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.st-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
 .st-form.two{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 .st-field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .st-field label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)}
@@ -209,7 +209,7 @@
 .st-offline{flex:none;background:var(--color-accent-700);color:var(--color-bg);padding:8px 16px;font-size:13.5px;text-align:center;font-weight:600}
 /* app installata a schermo intero: rispetta tacche e barre di sistema */
 .staff{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
-.st-bar{padding-top:max(10px,env(safe-area-inset-top))}
+.staff{padding-top:env(safe-area-inset-top)}
 .staff{padding-bottom:env(safe-area-inset-bottom)}
 html,body{overscroll-behavior:none}
 /* pagina iniziale e accesso */
@@ -228,3 +228,30 @@ html,body{overscroll-behavior:none}
 .st-secbar button{min-height:36px;padding:0 14px;border:1px solid var(--color-divider);border-radius:18px;background:var(--color-bg);font:inherit;font-size:14px;cursor:pointer;white-space:nowrap}
 .st-secbar button[aria-pressed=true]{border-color:var(--color-accent);color:var(--color-accent-700);font-weight:600}
 @media (max-width:420px){.st-hub-grid{grid-template-columns:1fr}.st-hub-card{min-height:110px}}
+
+/* numeri sempre alla stessa altezza (il font dei titoli ha cifre "basse": lo 0 sembrava una o) */
+.st-title,.st-colhead,.st-h1,.st-h2,.st-h3,.st-sum{font-variant-numeric:lining-nums tabular-nums}
+
+/* telefono e tablet: intestazione su due righe, sezioni scorrevoli di lato */
+@media (max-width:899px){
+  .st-bar{gap:8px 10px;padding-bottom:8px}
+  .st-brand{flex:1 1 0}
+  .st-title{font-size:18px}
+  .st-tools{margin-left:0;flex:none}
+  .st-tabs{order:3;flex:1 1 100%;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;padding:2px 0 4px;margin:0 -4px;-webkit-overflow-scrolling:touch;
+    mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+  .st-tabs::-webkit-scrollbar{display:none}
+  .st-tabs button{flex:none;white-space:nowrap;padding:0 14px}
+  .st-secbar{padding:6px 12px}
+  .st-ghost{padding:0 10px}
+}
+@media (max-width:480px){
+  .st-bar{padding-left:12px;padding-right:12px}
+  .st-kicker{font-size:9.5px}
+  .st-tools .st-ghost{font-size:12.5px;min-height:40px}
+  .st-h2{font-size:22px}
+  .st-chips{flex-wrap:wrap}
+  .st-stats{grid-template-columns:1fr 1fr}
+  .st-stat{padding:10px}
+  .st-form.two{grid-template-columns:1fr}
+}
