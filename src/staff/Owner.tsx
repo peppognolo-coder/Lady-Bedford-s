@@ -4,12 +4,13 @@ import { api, type L, type MenuItem, type Service, type Settings } from '../api'
 import { useCatalog, sortMenu } from '../catalog'
 import { CATS } from '../data'
 import { Field, Switch, money } from './shared'
-import { SettingsTab, SalesTab } from './OwnerMore'
+import { SettingsTab } from './OwnerMore'
 import StockTab from './Stock'
 import RecipesTab from './Recipes'
 import CostsTab from './CostsTab'
 import ContentTab from './ContentTab'
 import SeasonTab from './SeasonTab'
+import ReportTab from './ReportTab'
 import PinsTab from './PinsTab'
 import BackupTab from './BackupTab'
 import ClosuresTab from './ClosuresTab'
@@ -34,7 +35,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
   const save = async (f: () => Promise<void>, ok = 'Salvato') => {
     try { setErr(null); await f(); await reload(); setFlash(ok); setTimeout(() => setFlash(null), 2200); return true } catch (e) { setErr((e as Error).message); return false }
   }
-  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Vendite']]
+  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
   return (
     <div className="st-shell">
       <header className="st-bar">
@@ -58,7 +59,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
         {tab === 'backup' && <BackupTab />}
         {tab === 'pins' && <PinsTab />}
         {tab === 'settings' && <SettingsTab catalog={catalog} save={save} />}
-        {tab === 'sales' && <SalesTab />}
+        {tab === 'sales' && <ReportTab />}
       </main>
     </div>
   )
