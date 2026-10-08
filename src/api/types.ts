@@ -75,7 +75,9 @@ export interface Content {
   chapters: Chapter[] | null       // null = testi originali
   gallery: GalleryItem[] | null    // null = galleria originale
   invite: Partial<Record<'kicker' | 'line1' | 'line2' | 'address' | 'rsvp', L>>  // vuoto = testi originali
+  social?: Partial<Record<SocialId, string>>   // link ai profili: @nome, numero o indirizzo web
 }
+export type SocialId = 'instagram' | 'facebook' | 'tiktok' | 'whatsapp' | 'maps' | 'website'
 /* ---------- prenotazioni ---------- */
 export type BookingMode = 'required' | 'recommended' | 'free'   // necessaria · consigliata · accesso libero
 export interface BookingRule { id: string; label: string; from: string; to: string; yearly: boolean; mode: BookingMode }
