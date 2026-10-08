@@ -11,6 +11,10 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('lb-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()))
 })
+self.addEventListener('notificationclick', e => {
+  e.notification.close()
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => (list[0] ? list[0].focus() : self.clients.openWindow(self.registration.scope))))
+})
 self.addEventListener('message', e => { if (e.data === 'SKIP_WAITING') self.skipWaiting() })
 
 // pagina di riserva quando manca la rete: /cucina → cucina.html, /staff → staff.html, altrimenti la home
