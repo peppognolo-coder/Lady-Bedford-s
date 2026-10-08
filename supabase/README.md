@@ -23,6 +23,9 @@ Dopo il deploy, in *Authentication → URL Configuration* imposta *Site URL* sul
 - **Backup:** scheda *Dati e backup* → "Scarica backup completo" (un file JSON con tutto). Fallo ogni settimana e conservalo fuori dal dispositivo. Il piano gratuito di Supabase **non include backup automatici**, quindi questo è importante. Il ripristino riporta menu, ricette, impostazioni e contenuti; ordini e giacenze non vengono toccati.
 - **Chiusura di cassa:** la cassa chiude la giornata dalla scheda *Chiusura* (contanti contati, fondo per domani, differenza). La proprietà vede lo storico in *Chiusure cassa*. Tabella `cash_closures` (già in `01_schema.sql`). Non sostituisce la chiusura fiscale del registratore telematico.
 
+## Prenotazioni
+Tavoli e afternoon tea si prenotano dall'app clienti; le richieste di altri servizi (ricevimenti, lezioni, buoni) arrivano come richieste da confermare. La proprietà decide in *Regole prenotazione*: interruttore generale, modalità di solito (**necessaria / consigliata / accesso libero**), periodi particolari (anche ogni anno, es. Natale) con una modalità diversa, orari, coperti, durata del tavolo. Sala, cassa e proprietà vedono l'elenco in *Prenotazioni*, confermano, assegnano il tavolo e inseriscono prenotazioni telefoniche. I controlli (capienza, orari, giorni chiusi, periodi) sono fatti dal database, non solo dall'app. Tabella `bookings` e funzioni `place_booking` ecc. sono già in `01_schema.sql`.
+
 ## Cambio PIN
 La proprietà cambia i PIN dalla scheda **PIN di accesso** (funzione `set_staff_pin`, inclusa in `01_schema.sql`: solo la proprietà può usarla, il PIN viene salvato come hash e le sessioni del ruolo vengono chiuse). Il PIN dimenticato dalla proprietà stessa si reimposta dal pannello Supabase (*Authentication → Users*).
 
