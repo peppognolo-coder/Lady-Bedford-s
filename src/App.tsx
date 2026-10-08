@@ -4,7 +4,8 @@ import { useCatalog, sortMenu, hoursLabel, isOpenNow } from './catalog'
 import { ALLERGENS, allergenName } from './allergens'
 import BookingDialog, { MyBooking } from './BookingDialog'
 import { MODE_LABEL, isoDay, modeFor } from './booking'
-import { chaptersOf, galleryOf, galleryH, imageOf } from './content'
+import { SOCIALS, chaptersOf, galleryOf, galleryH, imageOf, socialUrl } from './content'
+import { flagTitle, playTune, systemNotify, unlockOnGesture, vibrate } from './alertsound'
 import type { Content } from './api/types'
 import { TX, CATS, TABS, IMG, eur, type Lang, type Screen } from './data'
 
@@ -76,6 +77,8 @@ export default function App() {
   const SLOTS = catalog.settings.slots.length ? catalog.settings.slots : ['16:00']
   const slotValue = SLOTS[Math.min(slot, SLOTS.length - 1)]
   const [live, setLive] = useState<OrderStatus | null>(null)
+  const [readyNote, setReadyNote] = useState<string | null>(null)
+  const lastStatus = useRef<string | null>(null)
   const [placing, setPlacing] = useState(false)
   const [orderErr, setOrderErr] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -104,6 +107,20 @@ export default function App() {
     poll()
     return () => { alive = false; clearInterval(timer) }
   }, [lastId])
+  useEffect(() => { unlockOnGesture() }, [])
+  // l'ordine passa a "pronto": suono, vibrazione e avviso a schermo
+  useEffect(() => {
+    const st = live?.status ?? null
+    if (st === 'ready' && lastStatus.current && lastStatus.current !== 'ready') {
+      playTune('ready', 0.8); vibrate('ready'); flagTitle()
+      const msg = TX[lang].orderReadyNow
+      setReadyNote(msg); void systemNotify('Lady Bedford’s', msg, 'lb-ready')
+      const h = window.setTimeout(() => setReadyNote(null), 15000)
+      lastStatus.current = st
+      return () => window.clearTimeout(h)
+    }
+    lastStatus.current = st
+  }, [live?.status, lang])
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [screen])
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
   useEffect(() => {
@@ -218,7 +235,7 @@ export default function App() {
       )}
 
       <main className="scroll" ref={scrollRef}>
-        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
+        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} social={catalog.content.social} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
 
         {screen === 'home' && (
           <div className="fade" style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -473,6 +490,7 @@ export default function App() {
               <span style={{ fontSize: 13 }}>{t.language}</span>
               <LangSeg labels={['Italiano', 'English']} big />
             </div>
+            <SocialLinks t={t} social={catalog.content.social} />
             <button className="link" style={{ color: 'var(--color-neutral-700)', fontSize: 12, alignSelf: 'center' }} onClick={() => { ss.del('lb:entered'); setScreen('invite') }}>{t.leave}</button>
           </div>
         )}
@@ -574,6 +592,13 @@ export default function App() {
 
       {dialog && <BookingDialog kind={dialog} svcTitle={catalog.services.find(x => x.id === dialog)?.title[lang]} catalog={catalog} lang={lang} onClose={() => setDialog(null)} />}
 
+      {readyNote && (
+        <div role="alert" className="fade" style={{ position: 'absolute', left: 14, right: 14, top: 'calc(10px + env(safe-area-inset-top))', zIndex: 20, background: 'var(--lb-green-900)', color: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 14, boxShadow: 'var(--shadow-md)' }}>
+          <span>{readyNote}</span>
+          <button className="link" style={{ color: 'var(--color-accent-300)', minHeight: 44 }} onClick={() => setReadyNote(null)}>OK</button>
+        </div>
+      )}
+
       {toast && (
         <div role="status" className="fade" style={{ position: 'absolute', left: 20, right: 20, bottom: 100, zIndex: 15, background: 'var(--lb-green-900)', color: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 12.5, boxShadow: 'var(--shadow-md)' }}>
           <span>{toast}</span>
@@ -586,7 +611,21 @@ export default function App() {
 
 const tile = (border: string): CSSProperties => ({ textAlign: 'left', padding: '16px 14px', border: `1px solid ${border}`, background: 'transparent', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--color-text)', display: 'flex', flexDirection: 'column', gap: 6 })
 
-function Invite({ t, inv, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; lang: Lang; onEnter: () => void; seg: ReactNode }) {
+/** Link ai profili social e di contatto, scelti dalla proprietà. */
+function SocialLinks({ t, social }: { t: (typeof TX)['it']; social?: Content['social'] }) {
+  const links = SOCIALS.map(s => ({ ...s, href: socialUrl(s.id, social?.[s.id]) })).filter((s): s is typeof s & { href: string } => !!s.href)
+  if (!links.length) return null
+  return (
+    <nav aria-label={t.followUs} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <span className="kicker" style={{ fontSize: 10, letterSpacing: '.2em' }}>{t.followUs}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: 4 }}>
+        {links.map(l => <a key={l.id} href={l.href} target="_blank" rel="noopener noreferrer" className="link" style={{ minHeight: 44, minWidth: 44, padding: '0 10px', display: 'inline-flex', alignItems: 'center', fontSize: 13, color: 'var(--lb-green-700)' }}>{l.label}</a>)}
+      </div>
+    </nav>
+  )
+}
+
+function Invite({ t, inv, social, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; social?: Content['social']; lang: Lang; onEnter: () => void; seg: ReactNode }) {
   return (
     <div className="fade" style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', padding: '16px 26px 34px' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{seg}</div>
@@ -603,6 +642,7 @@ function Invite({ t, inv, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Con
           </div>
         </div>
         <p style={{ margin: '18px 4px 0', fontSize: 11, textAlign: 'center', color: 'var(--color-neutral-700)', fontStyle: 'italic' }}>{inv.rsvp?.[lang] || t.inviteRsvp}</p>
+        <div style={{ marginTop: 6 }}><SocialLinks t={t} social={social} /></div>
       </div>
       <button className="btn-o" onClick={onEnter}>{t.inviteCta}</button>
     </div>
