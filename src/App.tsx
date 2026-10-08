@@ -259,7 +259,7 @@ export default function App() {
       )}
 
       <main className="scroll" ref={scrollRef}>
-        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} hours={openingSentence(catalog.settings, lang)} social={catalog.content.social} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
+        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} hours={openingSentence(catalog.settings, lang)} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
 
         {screen === 'home' && (
           <div className="fade" style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -707,7 +707,7 @@ function Greenery() {
   )
 }
 
-function Invite({ t, inv, hours, social, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; hours: string; social?: Content['social']; lang: Lang; onEnter: () => void; seg: ReactNode }) {
+function Invite({ t, inv, hours, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; hours: string; lang: Lang; onEnter: () => void; seg: ReactNode }) {
   return (
     <div className="inv fade">
       <div className="inv-light" aria-hidden />
@@ -726,10 +726,9 @@ function Invite({ t, inv, hours, social, lang, onEnter, seg }: { t: (typeof TX)[
           </div>
         </div>
         <p className="inv-rsvp">{inv.rsvp?.[lang] || t.inviteRsvp}</p>
-        <div style={{ marginTop: 4 }}><SocialLinks t={t} social={social} /></div>
+        <div className="inv-tiles" aria-hidden />
+        <button className="btn-o inv-cta" onClick={onEnter}>{t.inviteCta}</button>
       </div>
-      <div className="inv-tiles" aria-hidden />
-      <button className="btn-o inv-cta" onClick={onEnter}>{t.inviteCta}</button>
     </div>
   )
 }
