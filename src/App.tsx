@@ -5,6 +5,7 @@ import { ALLERGENS, allergenName } from './allergens'
 import BookingDialog, { MyBooking } from './BookingDialog'
 import { MODE_LABEL, isoDay, modeFor } from './booking'
 import { SOCIALS, chaptersOf, galleryOf, galleryH, imageOf, socialUrl } from './content'
+import { offerOf } from './schedule'
 import { flagTitle, playTune, systemNotify, unlockOnGesture, vibrate } from './alertsound'
 import type { Content } from './api/types'
 import { TX, CATS, TABS, IMG, eur, type Lang, type Screen } from './data'
@@ -72,7 +73,20 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [last, setLast] = useState({ total: 0, slot: '' })
   const { catalog, loaded: catLoaded, reload: reloadCatalog } = useCatalog()
-  const menu = useMemo(() => sortMenu(catalog.menu.filter(m => m.visible)), [catalog.menu])
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => { const t = setInterval(() => setClock(Date.now()), 60000); return () => clearInterval(t) }, [])
+  // menu stagionale: i prodotti fuori periodo spariscono, oppure restano come "in arrivo" se la proprietà lo ha scelto
+  const { menu, hold } = useMemo(() => {
+    const hold: Record<string, string> = {}
+    const at = new Date(clock)
+    const menu = sortMenu(catalog.menu.filter(m => m.visible)).flatMap(m => {
+      const o = offerOf(catalog.settings, m, at, p.lang)
+      if (o.state === 'hide') return []
+      if (o.state === 'teaser') { hold[m.id] = o.note; return [{ ...m, available: false }] }
+      return [m]
+    })
+    return { menu, hold }
+  }, [catalog.menu, catalog.settings, clock, p.lang])
   const byId = useMemo(() => Object.fromEntries(menu.map(m => [m.id, m])), [menu])
   const SLOTS = catalog.settings.slots.length ? catalog.settings.slots : ['16:00']
   const slotValue = SLOTS[Math.min(slot, SLOTS.length - 1)]
@@ -91,9 +105,9 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = lang }, [lang])
   useEffect(() => {
     if (!catLoaded) return
-    const stale = Object.keys(p.cart).filter(id => !byId[id])
+    const stale = Object.keys(p.cart).filter(id => !byId[id] || hold[id])
     if (stale.length) setP(o => { const cart = { ...o.cart }; stale.forEach(id => delete cart[id]); return { ...o, cart } })
-  }, [catLoaded, byId, p.cart])
+  }, [catLoaded, byId, hold, p.cart])
   const lastId = p.lastOrder?.id
   useEffect(() => {
     if (!lastId) { setLive(null); return }
@@ -160,8 +174,10 @@ export default function App() {
     }
   }
 
+  const catsOn = CATS.filter(c => menu.some(m => m.cat === c.id))
+  useEffect(() => { if (catsOn.length && !catsOn.some(c => c.id === cat)) setCat(catsOn[0].id) }, [catsOn.map(c => c.id).join(','), cat]) // eslint-disable-line react-hooks/exhaustive-deps
   const menuList = menu.filter(m => m.cat === cat && (!avoid.length || (m.allergens != null && !m.allergens.some(a => avoid.includes(a)))))
-  const cartIds = Object.keys(p.cart).filter(id => byId[id])
+  const cartIds = Object.keys(p.cart).filter(id => byId[id] && !hold[id])
   const count = cartIds.reduce((a, id) => a + p.cart[id], 0)
   const priceOf = (id: string) => byId[id]?.price ?? 0
   const soldOut = (id: string) => byId[id]?.available === false
@@ -292,7 +308,7 @@ export default function App() {
                 <h2 className="h-serif" style={{ fontWeight: 600, fontSize: 21, margin: 0 }}>{t.homeToday}</h2>
                 <button className="link" style={{ fontSize: 12 }} onClick={() => go('menu')}>{t.seeMenu}</button>
               </div>
-              {catalog.settings.featured.filter(id => byId[id]).slice(0, 4).map(id => {
+              {catalog.settings.featured.filter(id => byId[id] && !hold[id]).slice(0, 4).map(id => {
                 const m = loc(id)
                 return (
                   <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--color-divider)' }}>
@@ -324,7 +340,7 @@ export default function App() {
         {screen === 'menu' && (
           <div className="fade">
             <div className="lb-cats" role="tablist" style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--color-bg)', padding: '14px 20px 12px', borderBottom: '1px solid var(--color-divider)', display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
-              {CATS.map(c => (
+              {catsOn.map(c => (
                 <button key={c.id} role="tab" aria-selected={c.id === cat} onClick={() => setCat(c.id)}
                   style={{ flex: 'none', padding: '8px 14px', borderRadius: 20, background: 'transparent', fontSize: 12.5, cursor: 'pointer', border: `1px solid ${c.id === cat ? 'var(--lb-green)' : 'var(--color-divider)'}`, color: c.id === cat ? 'var(--lb-green-700)' : 'var(--color-text)' }}>{c[lang]}</button>
               ))}
@@ -368,7 +384,7 @@ export default function App() {
                         {m.vg ? <span className="pill vg">VG · {t.vegan}</span> : <span className="pill v">V · {t.vegetarian}</span>}
                       </div>
  {soldOut(id) && q === 0 ? (
-                        <span className="pill v" style={{ fontSize: 11 }}>{t.soldOut}</span>
+                        <span className="pill v" style={{ fontSize: 11 }}>{hold[id] || t.soldOut}</span>
                       ) : q === 0 ? (
                         <button className="btn-o" style={{ height: 32, padding: '0 14px', borderRadius: 16, fontSize: 14 }} onClick={() => qty(id, 1)}>{t.add}</button>
                       ) : (
