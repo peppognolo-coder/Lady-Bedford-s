@@ -1,3 +1,5 @@
+import { frond, bush } from './botanic'
+import Mural from './Mural'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { api, type OrderStatus } from './api'
 import { useCatalog, sortMenu, hoursLabel, isOpenNow, openingSentence } from './catalog'
@@ -270,10 +272,6 @@ export default function App() {
             <div style={{ border: '1px solid var(--lb-green)', borderRadius: '160px 160px 4px 4px', padding: 6, position: 'relative' }}>
               <div className="plate" style={{ height: 300, position: 'relative', borderRadius: '154px 154px 2px 2px', overflow: 'hidden', borderColor: 'var(--lb-green-100)' }}>
                 <img className="imgslot" src={imageOf(catalog.content, 'hero', IMG.hero)} alt={t.verandaCaption} style={{ objectPosition: '50% 30%' }} />
-                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                  <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 3, marginLeft: -1.5, background: 'var(--lb-green-100)', opacity: 0.9 }} />
-                  <div style={{ position: 'absolute', left: 0, right: 0, top: '46%', height: 3, background: 'var(--lb-green-100)', opacity: 0.9 }} />
-                </div>
               </div>
               <div className="kicker" style={{ position: 'absolute', left: '50%', bottom: -10, transform: 'translateX(-50%)', background: 'var(--color-bg)', padding: '0 10px', color: 'var(--lb-green-700)', whiteSpace: 'nowrap' }}>{t.verandaCaption}</div>
             </div>
@@ -645,57 +643,13 @@ function SocialLinks({ t, social }: { t: (typeof TX)['it']; social?: Content['so
   )
 }
 
-/* vegetazione dell'invito: foglie piene generate con un seme fisso, nessuna immagine da scaricare */
-function rng(seed: number) { let a = seed; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
-type Pt = [number, number]
-const f1 = (n: number) => n.toFixed(1)
-
-/* fronda di palma: nervatura ad arco, foglioline che pendono */
-function frond(seed: number, o: Pt, c1: Pt, c2: Pt, e: Pt, n: number, maxLen: number, fill: string, key: string) {
-  const r = rng(seed), out: ReactNode[] = []
-  const at = (u: number): Pt => { const m = 1 - u; return [m ** 3 * o[0] + 3 * m * m * u * c1[0] + 3 * m * u * u * c2[0] + u ** 3 * e[0], m ** 3 * o[1] + 3 * m * m * u * c1[1] + 3 * m * u * u * c2[1] + u ** 3 * e[1]] }
-  out.push(<path key={key + 'r'} d={`M${f1(o[0])} ${f1(o[1])} C${f1(c1[0])} ${f1(c1[1])} ${f1(c2[0])} ${f1(c2[1])} ${f1(e[0])} ${f1(e[1])}`} fill="none" stroke={fill} strokeWidth="2.4" strokeLinecap="round" />)
-  for (let k = 1; k <= n; k++) {
-    const u = 0.1 + 0.88 * (k / n), p = at(u), q = at(Math.min(1, u + 0.02))
-    const ang = Math.atan2(q[1] - p[1], q[0] - p[0])
-    const len = maxLen * (0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, 0.15 + 0.85 * u))) * (0.85 + 0.3 * r())
-    for (const side of [-1, 1]) {
-      const a = ang + side * ((0.95 - 0.3 * u) + (r() - 0.5) * 0.18)
-      const dx = Math.cos(a) * len, dy = Math.sin(a) * len + len * 0.28   // gravità: la fogliolina scende
-      const mx = p[0] + dx * 0.5, my = p[1] + dy * 0.5, w = len * 0.1
-      const nx = -dy / len * w, ny = dx / len * w
-      out.push(<path key={`${key}${k}${side}`} d={`M${f1(p[0])} ${f1(p[1])} Q${f1(mx + nx)} ${f1(my + ny)} ${f1(p[0] + dx)} ${f1(p[1] + dy)} Q${f1(mx - nx)} ${f1(my - ny)} ${f1(p[0])} ${f1(p[1])}Z`} fill={fill} opacity={0.82 + 0.18 * r()} />)
-    }
-  }
-  return out
-}
-
-/* foglie larghe tipo ficus / aspidistra, a ciuffo */
-function bush(seed: number, base: Pt, n: number, size: number, spread: number, fills: string[], key: string) {
-  const r = rng(seed), out: ReactNode[] = []
-  for (let k = 0; k < n; k++) {
-    const a = (-90 + (r() - 0.5) * 2 * spread) * Math.PI / 180, len = size * (0.55 + 0.45 * r()), w = len * (0.26 + 0.1 * r())
-    const tx = base[0] + Math.cos(a) * len, ty = base[1] + Math.sin(a) * len + len * 0.12
-    const nx = -Math.sin(a) * w, ny = Math.cos(a) * w
-    const m1: Pt = [base[0] + (tx - base[0]) * 0.35, base[1] + (ty - base[1]) * 0.35], m2: Pt = [base[0] + (tx - base[0]) * 0.75, base[1] + (ty - base[1]) * 0.75]
-    const fill = fills[Math.floor(r() * fills.length)]
-    out.push(
-      <g key={key + k}>
-        <path d={`M${f1(base[0])} ${f1(base[1])} C${f1(m1[0] + nx)} ${f1(m1[1] + ny)} ${f1(m2[0] + nx * 0.8)} ${f1(m2[1] + ny * 0.8)} ${f1(tx)} ${f1(ty)} C${f1(m2[0] - nx * 0.8)} ${f1(m2[1] - ny * 0.8)} ${f1(m1[0] - nx)} ${f1(m1[1] - ny)} ${f1(base[0])} ${f1(base[1])}Z`} fill={fill} />
-        <path d={`M${f1(base[0])} ${f1(base[1])} L${f1(tx)} ${f1(ty)}`} stroke="#8fb39a" strokeOpacity=".22" strokeWidth=".8" fill="none" />
-      </g>
-    )
-  }
-  return out
-}
-
 function Greenery() {
   const g = useMemo(() => ({
-    back: frond(11, [10, 0], [120, 14], [190, 100], [214, 250], 20, 96, '#10352d', 'a'),
-    mid: frond(23, [0, 24], [96, 40], [150, 120], [168, 232], 17, 84, '#1a4a3d', 'b'),
-    front: frond(37, [-6, 46], [70, 70], [112, 130], [124, 206], 14, 66, '#2a6853', 'c'),
-    bushBack: bush(5, [70, 196], 16, 170, 58, ['#0f3029', '#133a31', '#1a4a3d'], 'd'),
-    bushFront: bush(9, [46, 200], 11, 128, 66, ['#1d5242', '#256050', '#174538'], 'e'),
+    back: frond(11, [10, 0], [120, 14], [190, 100], [214, 250], 20, 96, '#1f5144', 'a'),
+    mid: frond(23, [0, 24], [96, 40], [150, 120], [168, 232], 17, 84, '#2a6757', 'b'),
+    front: frond(37, [-6, 46], [70, 70], [112, 130], [124, 206], 14, 66, '#3a826b', 'c'),
+    bushBack: bush(5, [70, 196], 16, 170, 58, ['#1d4e41', '#235a4b', '#2b6757'], 'd'),
+    bushFront: bush(9, [46, 200], 11, 128, 66, ['#34806a', '#2d7360', '#276a58'], 'e'),
   }), [])
   return (
     <>
@@ -707,15 +661,18 @@ function Greenery() {
   )
 }
 
+/** Stile dell'invito: 'carta' = cartoncino crema sul murale disegnato; 'verde' = arco su verde serra. */
+const INVITE_STYLE: 'carta' | 'verde' = 'verde'
+
 function Invite({ t, inv, hours, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; hours: string; lang: Lang; onEnter: () => void; seg: ReactNode }) {
+  const card = INVITE_STYLE === 'carta'
   return (
-    <div className="inv fade">
-      <div className="inv-light" aria-hidden />
-      <Greenery />
+    <div className={`inv fade${card ? ' inv-card' : ''}`}>
+      {card ? <Mural /> : <><div className="inv-light" aria-hidden /><Greenery /></>}
       <div className="inv-top">{seg}</div>
       <div className="inv-mid">
-        <div className="inv-arch">
-          <div className="inv-arch-in">
+        <div className={card ? 'inv-paper' : 'inv-arch'}>
+          <div className={card ? 'inv-paper-in' : 'inv-arch-in'}>
             <div className="h-serif inv-mono">LB</div>
             <div className="kicker inv-kicker">{inv.kicker?.[lang] || t.inviteKicker}</div>
             <div className="h-serif inv-line inv-drop">{inv.line1?.[lang] || t.inviteLine1}</div>
@@ -726,7 +683,7 @@ function Invite({ t, inv, hours, lang, onEnter, seg }: { t: (typeof TX)['it']; i
           </div>
         </div>
         <p className="inv-rsvp">{inv.rsvp?.[lang] || t.inviteRsvp}</p>
-        <div className="inv-tiles" aria-hidden />
+        {!card && <div className="inv-tiles" aria-hidden />}
         <button className="btn-o inv-cta" onClick={onEnter}>{t.inviteCta}</button>
       </div>
     </div>
