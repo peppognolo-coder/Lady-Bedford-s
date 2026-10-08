@@ -87,6 +87,21 @@ export interface Content {
   social?: Partial<Record<SocialId, string>>   // link ai profili: @nome, numero o indirizzo web
 }
 export type SocialId = 'instagram' | 'facebook' | 'tiktok' | 'whatsapp' | 'maps' | 'website'
+/* ---------- personale e turni (solo proprietà) ---------- */
+export type StaffRole = 'cucina' | 'sala' | 'cassa' | 'altro'
+export interface StaffMember { id: string; name: string; role: StaffRole; weekly_hours: number | null; active: boolean; sort: number }
+export type ShiftKind = 'work' | 'rest' | 'vacation' | 'permit' | 'sick'   // lavoro · riposo · ferie · permesso · malattia
+export type AdjKind = 'overtime' | 'early' | 'late'                        // straordinario · uscita anticipata · ritardo
+export interface Shift {
+  id: string; member_id: string; day: string        // 'YYYY-MM-DD'
+  kind: ShiftKind
+  start: string | null; end: string | null          // 'HH:MM' (solo per kind = 'work')
+  break_min: number
+  adj_kind: AdjKind | null; adj_min: number         // minuti in più (straordinario) o in meno (uscita anticipata, ritardo) rispetto al turno
+  note: string | null
+}
+export interface ShiftTemplate { id: string; label: string; start: string; end: string; break_min: number }
+export interface StaffConfig { min: Record<StaffRole, number>; templates: ShiftTemplate[] }   // min = persone minime per ruolo durante l'apertura
 /* ---------- prenotazioni ---------- */
 export type BookingMode = 'required' | 'recommended' | 'free'   // necessaria · consigliata · accesso libero
 export interface BookingRule { id: string; label: string; from: string; to: string; yearly: boolean; mode: BookingMode }
@@ -165,6 +180,14 @@ export interface Api {
   createStaffBooking(b: NewBooking): Promise<void>                    // staff: prenotazione telefonica
   setBookingStatus(id: string, status: BookingStatus, table?: string | null): Promise<void>
   // chiusura di cassa (cassa e proprietà)
+  listStaff(): Promise<StaffMember[]>
+  saveStaff(m: StaffMember): Promise<void>
+  deleteStaff(id: string): Promise<void>                       // cancella anche i suoi turni
+  listShifts(from: string, to: string): Promise<Shift[]>       // giorni 'YYYY-MM-DD', estremi inclusi
+  saveShifts(list: Shift[]): Promise<void>                     // inserisce o aggiorna
+  deleteShifts(ids: string[]): Promise<void>
+  getStaffConfig(): Promise<StaffConfig>
+  saveStaffConfig(c: StaffConfig): Promise<void>
   getClosure(day: string): Promise<Closure | null>
   listClosures(limit?: number): Promise<Closure[]>
   saveClosure(c: Closure): Promise<void>

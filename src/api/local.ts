@@ -4,12 +4,14 @@ import { demoBackoffice } from '../demoBackoffice'
 import { EMPTY_CONTENT } from '../content'
 import { toDataUrl } from '../image'
 import { availability, checkBooking, DEFAULT_BOOKING } from '../booking'
-import type { Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
+import { demoStaff } from '../demoStaff'
+import { withConfigDefaults } from '../shifts'
+import type { Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
 
 // Modalità demo: tutto nel browser (localStorage), condiviso tra le schede dello stesso browser.
 const KEY = 'lb:demo:v2'
 const PINS: Record<Role, string> = { kitchen: '111111', cashier: '222222', waiter: '333333', owner: '44444444' }
-type DB = { bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
+type DB = { staff?: { members: StaffMember[]; shifts: Shift[]; config?: StaffConfig }; bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
 
 let mem: DB = { orders: [], seq: {}, catalog: DEFAULT_CATALOG, back: EMPTY_BACKOFFICE }
 const read = (): DB => {
@@ -105,6 +107,7 @@ export function createLocalApi(): Api {
   const putCatalog = (f: (c: Catalog) => Catalog) => { const db = read(); write({ ...db, catalog: f(db.catalog) }) }
   const upsert = <T extends { id: string }>(list: T[], item: T) => (list.some(x => x.id === item.id) ? list.map(x => (x.id === item.id ? item : x)) : [...list, item])
 
+  const staffDb = (): NonNullable<DB['staff']> => { const db = read(); return db.staff ?? (window.__LB_DEMO?.seed ? demoStaff() : { members: [], shifts: [] }) }
   const putBack = (f: (b: Backoffice) => Backoffice) => { const db = read(); write({ ...db, back: f(db.back!) }) }
   const upsertBy = <T,>(list: T[], item: T, key: (x: T) => string) => (list.some(x => key(x) === key(item)) ? list.map(x => (key(x) === key(item) ? item : x)) : [...list, item])
   const moveStock = (id: string, delta: number, reason: MoveReason, note?: string) => putBack(b => ({
@@ -155,6 +158,14 @@ export function createLocalApi(): Api {
       write({ ...db, bookings: [...(db.bookings || []), b] })
     },
     async setBookingStatus(id, status, table) { const db = read(); write({ ...db, bookings: (db.bookings || []).map(b => (b.id === id ? { ...b, status, table_label: table === undefined ? b.table_label : table } : b)) }) },
+    async listStaff() { return [...(staffDb().members)].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)) },
+    async saveStaff(m) { const db = read(), st = staffDb(); write({ ...db, staff: { ...st, members: st.members.some(x => x.id === m.id) ? st.members.map(x => (x.id === m.id ? m : x)) : [...st.members, m] } }) },
+    async deleteStaff(id) { const db = read(), st = staffDb(); write({ ...db, staff: { ...st, members: st.members.filter(x => x.id !== id), shifts: st.shifts.filter(s => s.member_id !== id) } }) },
+    async listShifts(from, to) { return staffDb().shifts.filter(s => s.day >= from && s.day <= to).sort((a, b) => a.day.localeCompare(b.day) || (a.start ?? '').localeCompare(b.start ?? '')) },
+    async saveShifts(list) { const db = read(), st = staffDb(), ids = new Set(list.map(s => s.id)); write({ ...db, staff: { ...st, shifts: [...st.shifts.filter(s => !ids.has(s.id)), ...list] } }) },
+    async deleteShifts(ids) { const db = read(), st = staffDb(), del = new Set(ids); write({ ...db, staff: { ...st, shifts: st.shifts.filter(s => !del.has(s.id)) } }) },
+    async getStaffConfig() { return withConfigDefaults(staffDb().config) },
+    async saveStaffConfig(c) { const db = read(), st = staffDb(); write({ ...db, staff: { ...st, config: c } }) },
     async getClosure(day) { return (read().closures || []).find(c => c.day === day) ?? null },
     async listClosures(limit = 60) { return [...(read().closures || [])].sort((a, b) => b.day.localeCompare(a.day)).slice(0, limit) },
     async saveClosure(c) { const db = read(); write({ ...db, closures: [...(db.closures || []).filter(x => x.day !== c.day), c] }) },

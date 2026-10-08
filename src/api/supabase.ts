@@ -3,7 +3,8 @@ import { DEFAULT_SETTINGS } from '../defaults'
 import { DEFAULT_COSTS } from '../costs'
 import { EMPTY_CONTENT } from '../content'
 import { DEFAULT_BOOKING } from '../booking'
-import type { Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
+import { withConfigDefaults } from '../shifts'
+import type { Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
 import { startOfToday } from './types'
 
 const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
@@ -117,6 +118,37 @@ export function createSupabaseApi(url: string, key: string): Api {
       if (table !== undefined) patch.table_label = table
       const { error } = await sb.from('bookings').update(patch).eq('id', id); fail(error)
     },
+    async listStaff() {
+      const { data, error } = await sb.from('staff_members').select('*').order('sort').order('name'); fail(error)
+      return (data || []).map((r: Record<string, any>) => ({ id: r.id, name: r.name, role: r.role, weekly_hours: r.weekly_hours === null ? null : Number(r.weekly_hours), active: r.active, sort: r.sort }) as StaffMember)
+    },
+    async saveStaff(m) {
+      const { error } = await sb.from('staff_members').upsert({ id: m.id, name: m.name.trim(), role: m.role, weekly_hours: m.weekly_hours, active: m.active, sort: m.sort }); fail(error)
+    },
+    async deleteStaff(id) { const { error } = await sb.from('staff_members').delete().eq('id', id); fail(error) },
+    async listShifts(from, to) {
+      const out: Shift[] = []
+      for (let page = 0; ; page++) {   // PostgREST restituisce al massimo 1000 righe per richiesta
+        const { data, error } = await sb.from('staff_shifts').select('*').gte('day', from).lte('day', to).order('day').order('start_time').order('id').range(page * 1000, page * 1000 + 999); fail(error)
+        for (const r of (data || []) as Record<string, any>[]) out.push({ id: r.id, member_id: r.member_id, day: r.day, kind: r.kind, start: r.start_time ? String(r.start_time).slice(0, 5) : null, end: r.end_time ? String(r.end_time).slice(0, 5) : null, break_min: r.break_min, adj_kind: r.adj_kind, adj_min: r.adj_min, note: r.note })
+        if (!data || data.length < 1000) break
+      }
+      return out
+    },
+    async saveShifts(list) {
+      for (let i = 0; i < list.length; i += 200) {
+        const rows = list.slice(i, i + 200).map(s => ({ id: s.id, member_id: s.member_id, day: s.day, kind: s.kind, start_time: s.kind === 'work' ? s.start : null, end_time: s.kind === 'work' ? s.end : null, break_min: s.break_min, adj_kind: s.adj_kind, adj_min: s.adj_kind ? s.adj_min : 0, note: s.note }))
+        const { error } = await sb.from('staff_shifts').upsert(rows); fail(error)
+      }
+    },
+    async deleteShifts(ids) {
+      for (let i = 0; i < ids.length; i += 200) { const { error } = await sb.from('staff_shifts').delete().in('id', ids.slice(i, i + 200)); fail(error) }
+    },
+    async getStaffConfig() {
+      const { data, error } = await sb.from('staff_config').select('value').eq('id', 1).maybeSingle(); fail(error)
+      return withConfigDefaults(data?.value as Partial<StaffConfig> | undefined)
+    },
+    async saveStaffConfig(c) { const { error } = await sb.from('staff_config').upsert({ id: 1, value: c }); fail(error) },
     async getClosure(day) {
       const { data, error } = await sb.from('cash_closures').select('*').eq('day', day).maybeSingle()
       fail(error)
