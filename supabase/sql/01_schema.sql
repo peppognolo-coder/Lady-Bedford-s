@@ -487,3 +487,188 @@ drop policy if exists closures_insert on public.cash_closures;
 create policy closures_insert on public.cash_closures for insert to authenticated with check (public.is_cashier());
 drop policy if exists closures_update on public.cash_closures;
 create policy closures_update on public.cash_closures for update to authenticated using (public.is_cashier()) with check (public.is_cashier());
+
+-- ---------- prenotazioni (tavoli, afternoon tea, richieste di servizi) ----------
+create table if not exists public.bookings (
+  id          uuid primary key default gen_random_uuid(),
+  ref         text not null default upper(substr(md5(random()::text), 1, 5)),
+  created_at  timestamptz not null default now(),
+  kind        text not null check (char_length(kind) between 1 and 30),   -- 'table' | 'tea' | id di un servizio (solo richiesta)
+  day         date not null,
+  time        text check (time is null or time ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  party       int not null check (party between 1 and 60),
+  name        text not null check (char_length(name) between 1 and 60),
+  phone       text check (phone is null or char_length(phone) <= 30),
+  note        text check (note is null or char_length(note) <= 300),
+  status      text not null default 'pending' check (status in ('pending','confirmed','declined','cancelled','seated','noshow')),
+  table_label text check (table_label is null or char_length(table_label) <= 20),
+  source      text not null default 'app' check (source in ('app','staff'))
+);
+create index if not exists bookings_day_idx on public.bookings (day);
+alter table public.bookings enable row level security;
+revoke all on public.bookings from anon, authenticated;
+grant select on public.bookings to authenticated;
+grant update (status, table_label) on public.bookings to authenticated;
+drop policy if exists bookings_staff_read on public.bookings;
+create policy bookings_staff_read on public.bookings for select to authenticated using (public.is_staff());
+drop policy if exists bookings_staff_update on public.bookings;
+create policy bookings_staff_update on public.bookings for update to authenticated using (public.can_order() or public.is_back()) with check (public.can_order() or public.is_back());
+
+insert into public.settings (key, value) values ('booking', '{"enabled":true,"default_mode":"recommended","rules":[],"slots":["11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"],"capacity":24,"duration_min":90,"max_party":10,"advance_days":60,"min_notice_h":2,"auto_confirm":true}'::jsonb)
+on conflict (key) do nothing;
+
+create or replace function public._tmin(t text) returns int language sql immutable as $$ select split_part(t, ':', 1)::int * 60 + split_part(t, ':', 2)::int $$;
+
+-- modalità del giorno: primo periodo che lo contiene, altrimenti quella predefinita
+create or replace function public._booking_mode(cfg jsonb, d date) returns text language plpgsql stable as $$
+declare r jsonb; f date; t date; m int := extract(month from d)::int * 100 + extract(day from d)::int; fm int; tm int; hit boolean;
+begin
+  for r in select * from jsonb_array_elements(coalesce(cfg->'rules', '[]'::jsonb)) loop
+    f := (r->>'from')::date; t := (r->>'to')::date;
+    if coalesce((r->>'yearly')::boolean, false) then
+      fm := extract(month from f)::int * 100 + extract(day from f)::int; tm := extract(month from t)::int * 100 + extract(day from t)::int;
+      hit := case when fm <= tm then m between fm and tm else (m >= fm or m <= tm) end;
+    else
+      hit := d between f and t;
+    end if;
+    if hit then return r->>'mode'; end if;
+  end loop;
+  return coalesce(cfg->>'default_mode', 'recommended');
+end $$;
+
+-- posti ancora liberi se ci si siede a p_slot e si resta per tutta la durata
+create or replace function public._booking_left(cfg jsonb, d date, p_slot text) returns int language plpgsql stable as $$
+declare cap int := (cfg->>'capacity')::int; dur int := (cfg->>'duration_min')::int; s int := public._tmin(p_slot); u int; occ int; worst int;
+begin
+  worst := cap;
+  u := s;
+  while u < s + dur loop
+    select coalesce(sum(party), 0) into occ from public.bookings
+      where day = d and time is not null and status in ('pending','confirmed','seated')
+        and public._tmin(time) <= u and u < public._tmin(time) + dur;
+    worst := least(worst, cap - occ);
+    u := u + 15;
+  end loop;
+  return greatest(0, worst);
+end $$;
+
+-- pubblico: posti liberi per ogni orario di un giorno
+create or replace function public.booking_availability(p_day date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare cfg jsonb; s text; out jsonb := '{}'::jsonb;
+begin
+  select value into cfg from public.settings where key = 'booking';
+  if cfg is null then return out; end if;
+  for s in select jsonb_array_elements_text(cfg->'slots') loop
+    out := out || jsonb_build_object(s, public._booking_left(cfg, p_day, s));
+  end loop;
+  return out;
+end $$;
+
+-- pubblico: prenota (tavolo / afternoon tea) o invia una richiesta (altri servizi). Tutti i controlli sono qui, non nell'app.
+create or replace function public.place_booking(p_kind text, p_day date, p_time text, p_party int, p_name text, p_phone text, p_note text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare cfg jsonb; slot boolean := p_kind in ('table','tea'); now_it timestamp := now() at time zone 'Europe/Rome'; r public.bookings; v_status text;
+begin
+  if p_party is null or p_party < 1 or p_party > 60 then raise exception 'Indica quanti siete.'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'Scrivi il tuo nome.'; end if;
+  if p_day < now_it::date then raise exception 'Questa data è già passata.'; end if;
+  select value into cfg from public.settings where key = 'booking';
+  if slot then
+    if cfg is null or not coalesce((cfg->>'enabled')::boolean, false) then raise exception 'Le prenotazioni online non sono attive: chiamaci o passa a trovarci.'; end if;
+    if p_day > now_it::date + (cfg->>'advance_days')::int then raise exception 'Si prenota fino a % giorni prima.', cfg->>'advance_days'; end if;
+    if not exists (select 1 from public.settings s, jsonb_array_elements_text(s.value->'open_days') od where s.key = 'main' and od::int = extract(dow from p_day)::int) then
+      raise exception 'Quel giorno siamo chiusi.'; end if;
+    if public._booking_mode(cfg, p_day) = 'free' then raise exception 'In quel giorno non serve prenotare: vieni pure, ti aspettiamo.'; end if;
+    if p_party > (cfg->>'max_party')::int then raise exception 'Per gruppi oltre % persone chiamaci.', cfg->>'max_party'; end if;
+    if p_time is null or not (cfg->'slots') @> to_jsonb(p_time) then raise exception 'Scegli un orario valido.'; end if;
+    if p_day = now_it::date and public._tmin(p_time) < extract(hour from now_it)::int * 60 + extract(minute from now_it)::int + (cfg->>'min_notice_h')::int * 60 then
+      raise exception 'Servono almeno % ore di anticipo.', cfg->>'min_notice_h'; end if;
+    perform pg_advisory_xact_lock(hashtext('booking' || p_day::text));
+    if public._booking_left(cfg, p_day, p_time) < p_party then raise exception 'Quell’orario non ha più posti: scegline un altro.'; end if;
+    if p_phone is not null and p_phone <> '' and (select count(*) from public.bookings where phone = p_phone and day = p_day and status in ('pending','confirmed')) >= 3 then
+      raise exception 'Hai già prenotazioni per quel giorno: chiamaci per modificarle.'; end if;
+    v_status := case when coalesce((cfg->>'auto_confirm')::boolean, false) then 'confirmed' else 'pending' end;
+  else
+    v_status := 'pending';
+  end if;
+  insert into public.bookings (kind, day, time, party, name, phone, note, status, source)
+  values (left(p_kind, 30), p_day, case when slot then p_time end, p_party, left(trim(p_name), 60), nullif(left(trim(coalesce(p_phone,'')), 30), ''), nullif(left(trim(coalesce(p_note,'')), 300), ''), v_status, 'app')
+  returning * into r;
+  return jsonb_build_object('id', r.id, 'ref', r.ref, 'status', r.status, 'kind', r.kind, 'day', r.day, 'time', r.time, 'party', r.party, 'name', r.name, 'table_label', r.table_label);
+end $$;
+
+-- pubblico: stato della propria prenotazione (l'id è un uuid non indovinabile)
+create or replace function public.booking_status(p_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', id, 'ref', ref, 'status', status, 'kind', kind, 'day', day, 'time', time, 'party', party, 'name', name, 'table_label', table_label)
+  from public.bookings where id = p_id
+$$;
+create or replace function public.cancel_booking(p_id uuid) returns void
+language sql security definer set search_path = public as $$
+  update public.bookings set status = 'cancelled' where id = p_id and status in ('pending','confirmed')
+$$;
+
+-- staff: prenotazione presa al telefono o al banco (nessun limite di orario o capienza, decide chi la inserisce)
+create or replace function public.staff_booking(p_kind text, p_day date, p_time text, p_party int, p_name text, p_phone text, p_note text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not (public.can_order() or public.is_back()) then raise exception 'non autorizzato'; end if;
+  if p_party < 1 or p_party > 60 or coalesce(trim(p_name), '') = '' then raise exception 'Controlla nome e numero di persone.'; end if;
+  insert into public.bookings (kind, day, time, party, name, phone, note, status, source)
+  values (left(p_kind, 30), p_day, case when p_kind in ('table','tea') then p_time end, p_party, left(trim(p_name), 60), nullif(left(trim(coalesce(p_phone,'')), 30), ''), nullif(left(trim(coalesce(p_note,'')), 300), ''), 'confirmed', 'staff');
+end $$;
+
+revoke all on function public.booking_availability(date), public.place_booking(text,date,text,int,text,text,text), public.booking_status(uuid), public.cancel_booking(uuid), public.staff_booking(text,date,text,int,text,text,text) from public;
+grant execute on function public.booking_availability(date), public.place_booking(text,date,text,int,text,text,text), public.booking_status(uuid), public.cancel_booking(uuid) to anon, authenticated;
+grant execute on function public.staff_booking(text,date,text,int,text,text,text) to authenticated;
+
+-- tempo reale anche per le prenotazioni (lo staff vede subito le nuove)
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'bookings') then
+    alter publication supabase_realtime add table public.bookings;
+  end if;
+end $$;
+
+-- =====================================================================
+-- PERSONALE E TURNI — visibile e modificabile solo dalla proprietà
+-- =====================================================================
+create table if not exists public.staff_members (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null check (length(trim(name)) between 1 and 60),
+  role         text not null default 'sala' check (role in ('cucina','sala','cassa','altro')),
+  weekly_hours numeric(5,2) check (weekly_hours is null or (weekly_hours >= 0 and weekly_hours <= 80)),
+  active       boolean not null default true,
+  sort         int not null default 0,
+  created_at   timestamptz not null default now()
+);
+create table if not exists public.staff_shifts (
+  id          uuid primary key default gen_random_uuid(),
+  member_id   uuid not null references public.staff_members(id) on delete cascade,
+  day         date not null,
+  kind        text not null default 'work' check (kind in ('work','rest','vacation','permit','sick')),
+  start_time  time,
+  end_time    time,
+  break_min   int not null default 0 check (break_min between 0 and 480),
+  adj_kind    text check (adj_kind in ('overtime','early','late')),
+  adj_min     int not null default 0 check (adj_min between 0 and 720),
+  note        text check (note is null or length(note) <= 200),
+  created_at  timestamptz not null default now(),
+  check (kind <> 'work' or (start_time is not null and end_time is not null and end_time > start_time))
+);
+create index if not exists staff_shifts_day_idx on public.staff_shifts (day, member_id);
+create table if not exists public.staff_config (
+  id    int primary key default 1 check (id = 1),
+  value jsonb not null default '{}'::jsonb
+);
+insert into public.staff_config (id) values (1) on conflict do nothing;
+
+do $$ declare t text; begin
+  foreach t in array array['staff_members','staff_shifts','staff_config'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+    execute format('drop policy if exists %I on public.%I', t || '_owner', t);
+    execute format('create policy %I on public.%I for all to authenticated using (public.is_owner()) with check (public.is_owner())', t || '_owner', t);
+  end loop;
+end $$;
