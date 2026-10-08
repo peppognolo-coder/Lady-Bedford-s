@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { api, type OrderStatus } from './api'
-import { useCatalog, sortMenu, hoursLabel, isOpenNow } from './catalog'
+import { useCatalog, sortMenu, hoursLabel, isOpenNow, openingSentence } from './catalog'
 import { ALLERGENS, allergenName } from './allergens'
 import BookingDialog, { MyBooking } from './BookingDialog'
 import { MODE_LABEL, isoDay, modeFor } from './booking'
@@ -107,6 +107,11 @@ export default function App() {
 
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(p)) } catch { /* ignore */ } }, [p])
   useEffect(() => { document.documentElement.lang = lang }, [lang])
+  useEffect(() => {
+    const c = document.documentElement.classList
+    if (screen === 'invite') c.add('is-invite'); else c.remove('is-invite')
+    return () => c.remove('is-invite')
+  }, [screen])
   useEffect(() => {
     if (!catLoaded) return
     const stale = Object.keys(p.cart).filter(id => !byId[id] || hold[id])
@@ -254,7 +259,7 @@ export default function App() {
       )}
 
       <main className="scroll" ref={scrollRef}>
-        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} social={catalog.content.social} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
+        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} hours={openingSentence(catalog.settings, lang)} social={catalog.content.social} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
 
         {screen === 'home' && (
           <div className="fade" style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -640,26 +645,91 @@ function SocialLinks({ t, social }: { t: (typeof TX)['it']; social?: Content['so
   )
 }
 
-function Invite({ t, inv, social, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; social?: Content['social']; lang: Lang; onEnter: () => void; seg: ReactNode }) {
+/* vegetazione dell'invito: foglie piene generate con un seme fisso, nessuna immagine da scaricare */
+function rng(seed: number) { let a = seed; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+type Pt = [number, number]
+const f1 = (n: number) => n.toFixed(1)
+
+/* fronda di palma: nervatura ad arco, foglioline che pendono */
+function frond(seed: number, o: Pt, c1: Pt, c2: Pt, e: Pt, n: number, maxLen: number, fill: string, key: string) {
+  const r = rng(seed), out: ReactNode[] = []
+  const at = (u: number): Pt => { const m = 1 - u; return [m ** 3 * o[0] + 3 * m * m * u * c1[0] + 3 * m * u * u * c2[0] + u ** 3 * e[0], m ** 3 * o[1] + 3 * m * m * u * c1[1] + 3 * m * u * u * c2[1] + u ** 3 * e[1]] }
+  out.push(<path key={key + 'r'} d={`M${f1(o[0])} ${f1(o[1])} C${f1(c1[0])} ${f1(c1[1])} ${f1(c2[0])} ${f1(c2[1])} ${f1(e[0])} ${f1(e[1])}`} fill="none" stroke={fill} strokeWidth="2.4" strokeLinecap="round" />)
+  for (let k = 1; k <= n; k++) {
+    const u = 0.1 + 0.88 * (k / n), p = at(u), q = at(Math.min(1, u + 0.02))
+    const ang = Math.atan2(q[1] - p[1], q[0] - p[0])
+    const len = maxLen * (0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, 0.15 + 0.85 * u))) * (0.85 + 0.3 * r())
+    for (const side of [-1, 1]) {
+      const a = ang + side * ((0.95 - 0.3 * u) + (r() - 0.5) * 0.18)
+      const dx = Math.cos(a) * len, dy = Math.sin(a) * len + len * 0.28   // gravità: la fogliolina scende
+      const mx = p[0] + dx * 0.5, my = p[1] + dy * 0.5, w = len * 0.1
+      const nx = -dy / len * w, ny = dx / len * w
+      out.push(<path key={`${key}${k}${side}`} d={`M${f1(p[0])} ${f1(p[1])} Q${f1(mx + nx)} ${f1(my + ny)} ${f1(p[0] + dx)} ${f1(p[1] + dy)} Q${f1(mx - nx)} ${f1(my - ny)} ${f1(p[0])} ${f1(p[1])}Z`} fill={fill} opacity={0.82 + 0.18 * r()} />)
+    }
+  }
+  return out
+}
+
+/* foglie larghe tipo ficus / aspidistra, a ciuffo */
+function bush(seed: number, base: Pt, n: number, size: number, spread: number, fills: string[], key: string) {
+  const r = rng(seed), out: ReactNode[] = []
+  for (let k = 0; k < n; k++) {
+    const a = (-90 + (r() - 0.5) * 2 * spread) * Math.PI / 180, len = size * (0.55 + 0.45 * r()), w = len * (0.26 + 0.1 * r())
+    const tx = base[0] + Math.cos(a) * len, ty = base[1] + Math.sin(a) * len + len * 0.12
+    const nx = -Math.sin(a) * w, ny = Math.cos(a) * w
+    const m1: Pt = [base[0] + (tx - base[0]) * 0.35, base[1] + (ty - base[1]) * 0.35], m2: Pt = [base[0] + (tx - base[0]) * 0.75, base[1] + (ty - base[1]) * 0.75]
+    const fill = fills[Math.floor(r() * fills.length)]
+    out.push(
+      <g key={key + k}>
+        <path d={`M${f1(base[0])} ${f1(base[1])} C${f1(m1[0] + nx)} ${f1(m1[1] + ny)} ${f1(m2[0] + nx * 0.8)} ${f1(m2[1] + ny * 0.8)} ${f1(tx)} ${f1(ty)} C${f1(m2[0] - nx * 0.8)} ${f1(m2[1] - ny * 0.8)} ${f1(m1[0] - nx)} ${f1(m1[1] - ny)} ${f1(base[0])} ${f1(base[1])}Z`} fill={fill} />
+        <path d={`M${f1(base[0])} ${f1(base[1])} L${f1(tx)} ${f1(ty)}`} stroke="#8fb39a" strokeOpacity=".22" strokeWidth=".8" fill="none" />
+      </g>
+    )
+  }
+  return out
+}
+
+function Greenery() {
+  const g = useMemo(() => ({
+    back: frond(11, [10, 0], [120, 14], [190, 100], [214, 250], 20, 96, '#10352d', 'a'),
+    mid: frond(23, [0, 24], [96, 40], [150, 120], [168, 232], 17, 84, '#1a4a3d', 'b'),
+    front: frond(37, [-6, 46], [70, 70], [112, 130], [124, 206], 14, 66, '#2a6853', 'c'),
+    bushBack: bush(5, [70, 196], 16, 170, 58, ['#0f3029', '#133a31', '#1a4a3d'], 'd'),
+    bushFront: bush(9, [46, 200], 11, 128, 66, ['#1d5242', '#256050', '#174538'], 'e'),
+  }), [])
   return (
-    <div className="fade" style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', padding: '16px 26px 34px' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{seg}</div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ border: '1px solid var(--color-accent)', padding: 6, borderRadius: 2 }}>
-          <div style={{ border: '1px solid var(--lb-green)', padding: '34px 24px 30px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <div className="h-serif" style={{ width: 62, height: 62, borderRadius: '50%', border: '1px solid var(--color-accent)', display: 'grid', placeItems: 'center', fontStyle: 'italic', fontSize: 26, color: 'var(--color-accent-700)' }}>LB</div>
-            <div className="kicker" style={{ fontSize: 10, letterSpacing: '.2em' }}>{inv.kicker?.[lang] || t.inviteKicker}</div>
-            <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 19, lineHeight: 1.35, color: 'var(--color-neutral-800)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{inv.line1?.[lang] || t.inviteLine1}</div>
-            <h1 className="h-serif" style={{ fontWeight: 400, fontSize: 40, lineHeight: 1, margin: 0 }}>Lady Bedford’s</h1>
-            <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 19, lineHeight: 1.35, color: 'var(--color-neutral-800)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{inv.line2?.[lang] || t.inviteLine2}</div>
-            <div style={{ width: 40, height: 1, background: 'var(--color-accent)' }} />
-            <div className="tnum" style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--color-neutral-700)' }}>{inv.address?.[lang] || t.inviteAddress}</div>
+    <>
+      <svg className="inv-leaf tl" viewBox="0 0 260 300" aria-hidden focusable="false"><defs><filter id="inv-soft"><feGaussianBlur stdDeviation="1.4" /></filter></defs><g filter="url(#inv-soft)">{g.back}</g>{g.mid}{g.front}</svg>
+      <svg className="inv-leaf tr" viewBox="0 0 260 300" aria-hidden focusable="false"><g filter="url(#inv-soft)">{g.back}</g>{g.mid}</svg>
+      <svg className="inv-leaf bl" viewBox="0 0 220 210" aria-hidden focusable="false"><g filter="url(#inv-soft)">{g.bushBack}</g>{g.bushFront}</svg>
+      <svg className="inv-leaf br" viewBox="0 0 220 210" aria-hidden focusable="false"><g filter="url(#inv-soft)">{g.bushBack}</g>{g.bushFront}</svg>
+    </>
+  )
+}
+
+function Invite({ t, inv, hours, social, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; hours: string; social?: Content['social']; lang: Lang; onEnter: () => void; seg: ReactNode }) {
+  return (
+    <div className="inv fade">
+      <div className="inv-light" aria-hidden />
+      <Greenery />
+      <div className="inv-top">{seg}</div>
+      <div className="inv-mid">
+        <div className="inv-arch">
+          <div className="inv-arch-in">
+            <div className="h-serif inv-mono">LB</div>
+            <div className="kicker inv-kicker">{inv.kicker?.[lang] || t.inviteKicker}</div>
+            <div className="h-serif inv-line inv-drop">{inv.line1?.[lang] || t.inviteLine1}</div>
+            <h1 className="h-serif inv-name">Lady Bedford’s</h1>
+            <div className="h-serif inv-line">{inv.line2?.[lang] || hours}</div>
+            <div className="inv-rule" aria-hidden><i /></div>
+            <div className="inv-addr">{inv.address?.[lang] || t.inviteAddress}</div>
           </div>
         </div>
-        <p style={{ margin: '18px 4px 0', fontSize: 11, textAlign: 'center', color: 'var(--color-neutral-700)', fontStyle: 'italic' }}>{inv.rsvp?.[lang] || t.inviteRsvp}</p>
-        <div style={{ marginTop: 6 }}><SocialLinks t={t} social={social} /></div>
+        <p className="inv-rsvp">{inv.rsvp?.[lang] || t.inviteRsvp}</p>
+        <div style={{ marginTop: 4 }}><SocialLinks t={t} social={social} /></div>
       </div>
-      <button className="btn-o" onClick={onEnter}>{t.inviteCta}</button>
+      <div className="inv-tiles" aria-hidden />
+      <button className="btn-o inv-cta" onClick={onEnter}>{t.inviteCta}</button>
     </div>
   )
 }
