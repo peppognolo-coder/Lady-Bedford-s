@@ -16,6 +16,7 @@ const mapOrders = (rows: Row[]) => rows.map(r => ({
   items: (r.order_items || []).map(i => ({ ...i, unit_price: num(i.unit_price) })),
 })) as unknown as Order[]
 
+let chanSeq = 0
 export function createSupabaseApi(url: string, key: string): Api {
   const sb = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } })
   const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message) }
@@ -178,7 +179,8 @@ export function createSupabaseApi(url: string, key: string): Api {
     async moveStock(id, delta, reason, note) { const { error } = await sb.rpc('move_stock', { p_id: id, p_delta: delta, p_reason: reason, p_note: note ?? null }); fail(error) },
     async setStock(id, qty, note) { const { error } = await sb.rpc('set_stock', { p_id: id, p_qty: qty, p_note: note ?? null }); fail(error) },
     subscribe(cb) {
-      const ch = sb.channel('lb-live')
+      // un canale per ogni ascoltatore: con lo stesso nome Supabase rifiuta il secondo (e la pagina diventa bianca)
+      const ch = sb.channel(`lb-live-${++chanSeq}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, cb)
