@@ -10,6 +10,7 @@ import RecipesTab from './Recipes'
 import CostsTab from './CostsTab'
 import ContentTab from './ContentTab'
 import SeasonTab from './SeasonTab'
+import StaffTab from './StaffTab'
 import ReportTab from './ReportTab'
 import PinsTab from './PinsTab'
 import BackupTab from './BackupTab'
@@ -20,7 +21,7 @@ import { AllergenChips } from './AllergenPicker'
 import { fromRecipe, sortAllergens } from '../allergens'
 import { ImagePicker } from './ImagePicker'
 
-type Tab = 'menu' | 'recipes' | 'season' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales'
+type Tab = 'menu' | 'recipes' | 'season' | 'staff' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales'
 
 export default function Owner({ onLogout }: { onLogout: () => void }) {
   const { catalog, reload } = useCatalog()
@@ -35,7 +36,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
   const save = async (f: () => Promise<void>, ok = 'Salvato') => {
     try { setErr(null); await f(); await reload(); setFlash(ok); setTimeout(() => setFlash(null), 2200); return true } catch (e) { setErr((e as Error).message); return false }
   }
-  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
+  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['staff', 'Personale e turni'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
   return (
     <div className="st-shell">
       <header className="st-bar">
@@ -55,6 +56,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
         {tab === 'content' && <ContentTab key={JSON.stringify(catalog.content).length} catalog={catalog} save={save} />}
         {tab === 'bookings' && <BookingsTab bookings={bookings} />}
         {tab === 'bookingrules' && <BookingConfigTab catalog={catalog} save={save} />}
+        {tab === 'staff' && <StaffTab />}
         {tab === 'closures' && <ClosuresTab />}
         {tab === 'backup' && <BackupTab />}
         {tab === 'pins' && <PinsTab />}

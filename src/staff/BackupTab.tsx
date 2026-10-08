@@ -34,7 +34,7 @@ export default function BackupTab() {
   const run = async (f: () => Promise<string>) => { setBusy(true); setMsg(null); try { setMsg({ ok: true, t: await f() }) } catch (e) { setMsg({ ok: false, t: (e as Error).message }) } finally { setBusy(false) } }
   const backup = () => run(async () => { const r = await downloadFullBackup(); setLast(lastBackup()); return `Backup scaricato: ${r.orders} ordini, ${r.menu} prodotti, ${r.ingredients} ingredienti. Conservalo fuori da questo dispositivo (cloud, chiavetta, email).` })
   const restore = (f?: File) => f && run(async () => {
-    if (!confirm('Ripristinare da questo backup? Menu, prezzi, servizi, impostazioni, contenuti, ricette e costi verranno sostituiti con quelli del file. Ordini e giacenze non cambiano.')) return 'Ripristino annullato.'
+    if (!confirm('Ripristinare da questo backup? Menu, prezzi, servizi, impostazioni, contenuti, ricette, costi, personale e turni verranno sostituiti con quelli del file. Ordini e giacenze non cambiano.')) return 'Ripristino annullato.'
     const r = await restoreBackup(await f.text()); return `Ripristinati ${r.menu} prodotti, ${r.recipes} ricette, ${r.ingredients} ingredienti.`
   })
   const exportMenu = () => run(async () => {
@@ -60,7 +60,7 @@ export default function BackupTab() {
           <button className="st-act" disabled={busy} onClick={() => void backup()}>{busy ? 'Attendi…' : 'Scarica backup completo'}</button>
           <label className="st-act alt" style={{ cursor: 'pointer' }}>Ripristina da file<input type="file" accept="application/json,.json" hidden onChange={e => { void restore(e.target.files?.[0]); e.target.value = '' }} /></label>
         </div>
-        <p className="st-hint">Il backup è un unico file con menu, servizi, impostazioni, contenuti, ricette, costi, scorte e tutti gli ordini. Il ripristino riporta menu, ricette e impostazioni; ordini e giacenze restano come sono.</p>
+        <p className="st-hint">Il backup è un unico file con menu, servizi, impostazioni, contenuti, ricette, costi, scorte, personale e turni e tutti gli ordini. Il ripristino riporta menu, ricette, impostazioni, personale e turni; ordini e giacenze restano come sono.</p>
         {msg && <div className={msg.ok ? 'st-flash' : 'st-alert inline'} role={msg.ok ? 'status' : 'alert'} style={msg.ok ? { position: 'static' } : undefined}>{msg.t}</div>}
         <div className="st-actions">
           <button className="st-ghost" disabled={busy} onClick={() => void exportMenu()}>Menu in Excel (CSV)</button>
