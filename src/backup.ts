@@ -37,7 +37,9 @@ export const ordersCsv = (orders: Order[]) => ({
 export const BACKUP_APP = 'lady-bedford'
 export async function buildBackup() {
   const [catalog, orders, back, moves] = await Promise.all([api.getCatalog(), api.listOrdersSince(new Date(2000, 0, 1)), api.getBackoffice(), api.listAllMoves()])
-  const data = { app: BACKUP_APP, version: 1, created_at: new Date().toISOString(), catalog, backoffice: { ...back, moves }, orders }
+  // personale e turni: solo la proprietà può leggerli (per gli altri ruoli la richiesta viene negata e il backup resta senza)
+  const staff = await Promise.all([api.listStaff(), api.listShifts('2000-01-01', '2100-01-01'), api.getStaffConfig()]).then(([members, shifts, config]) => ({ members, shifts, config })).catch(() => null)
+  const data = { app: BACKUP_APP, version: 1, created_at: new Date().toISOString(), catalog, backoffice: { ...back, moves }, orders, staff }
   return { data, text: JSON.stringify(data) }
 }
 export async function downloadFullBackup() {
@@ -47,7 +49,7 @@ export async function downloadFullBackup() {
   return { orders: data.orders.length, menu: data.catalog.menu.length, ingredients: data.backoffice.ingredients.length }
 }
 
-/** Ripristina catalogo, contenuti, ricette e costi da un backup. Ordini e giacenze NON vengono toccati. */
+/** Ripristina catalogo, contenuti, ricette, costi, personale e turni da un backup. Ordini e giacenze NON vengono toccati. */
 export async function restoreBackup(raw: string) {
   let d: any // eslint-disable-line @typescript-eslint/no-explicit-any
   try { d = JSON.parse(raw) } catch { throw new Error('Il file non è un backup valido.') }
@@ -61,5 +63,10 @@ export async function restoreBackup(raw: string) {
   for (const i of d.backoffice.ingredients) await api.saveIngredient(have.has(i.id) ? { ...i, stock: cur.ingredients.find(x => x.id === i.id)!.stock } : i)
   for (const r of d.backoffice.recipes) await api.saveRecipe(r)
   await api.saveCosts(d.backoffice.costs)
+  if (d.staff?.members) {
+    for (const m of d.staff.members) await api.saveStaff(m)
+    if (d.staff.shifts?.length) await api.saveShifts(d.staff.shifts)
+    if (d.staff.config) await api.saveStaffConfig(d.staff.config)
+  }
   return { menu: d.catalog.menu.length, ingredients: d.backoffice.ingredients.length, recipes: d.backoffice.recipes.length }
 }
