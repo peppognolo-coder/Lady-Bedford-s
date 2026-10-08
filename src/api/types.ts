@@ -84,6 +84,7 @@ export interface Content {
   chapters: Chapter[] | null       // null = testi originali
   gallery: GalleryItem[] | null    // null = galleria originale
   invite: Partial<Record<'kicker' | 'line1' | 'line2' | 'address' | 'rsvp', L>>  // vuoto = testi originali
+  loyalty?: L                      // testo sulla tessera fedeltà cartacea (vuoto = testo originale)
   social?: Partial<Record<SocialId, string>>   // link ai profili: @nome, numero o indirizzo web
 }
 export type SocialId = 'instagram' | 'facebook' | 'tiktok' | 'whatsapp' | 'maps' | 'website'
