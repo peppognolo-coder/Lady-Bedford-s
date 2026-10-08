@@ -2,6 +2,7 @@
 *{box-sizing:border-box}
 html,body,#root{height:100%;margin:0}
 body{margin:0;background:var(--color-neutral-300);font-family:var(--font-body);color:var(--color-text);-webkit-tap-highlight-color:transparent}
+@media (max-width:519px){body{background:var(--color-bg)}}
 button{font:inherit;color:inherit}
 .app{position:relative;margin:0 auto;max-width:480px;height:100%;display:flex;flex-direction:column;background:var(--color-bg);overflow:hidden}
 @media (min-width:520px){.app{box-shadow:var(--shadow-lg)}}
