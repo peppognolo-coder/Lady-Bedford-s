@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { api, type Order, type PayMethod } from '../api'
 import Pos from './Pos'
+import CashClose from './CashClose'
 import { Availability, OrderHeader, money, pad, serveOrder, settleOrder, useBeep, useNow, useOrders } from './shared'
 
-type Tab = 'orders' | 'tables' | 'pos' | 'day' | 'out'
+type Tab = 'orders' | 'tables' | 'pos' | 'day' | 'close' | 'out'
 const STATUS_LABEL = { new: 'In coda', preparing: 'In preparazione', ready: 'Pronto', served: 'Servito', completed: 'Consegnato', cancelled: 'Annullato' } as const
 const PAY_LABEL: Record<PayMethod, string> = { cash: 'Contanti', card: 'Carta' }
 
@@ -27,6 +28,7 @@ export default function Cashier({ onLogout }: { onLogout: () => void }) {
           <button aria-pressed={tab === 'tables'} onClick={() => setTab('tables')}>Tavoli</button>
           <button aria-pressed={tab === 'pos'} onClick={() => setTab('pos')}>Nuovo ordine</button>
           <button aria-pressed={tab === 'day'} onClick={() => setTab('day')}>Giornata</button>
+          <button aria-pressed={tab === 'close'} onClick={() => setTab('close')}>Chiusura</button>
           <button aria-pressed={tab === 'out'} onClick={() => setTab('out')}>Esaurito</button>
         </nav>
         <div className="st-tools">
@@ -40,6 +42,7 @@ export default function Cashier({ onLogout }: { onLogout: () => void }) {
         {tab === 'tables' && <TablesTab orders={orders} now={now} run={run} />}
         {tab === 'pos' && <Pos mode="cashier" onSent={() => { void reload(); setTab('orders') }} />}
         {tab === 'day' && <Day orders={orders} />}
+        {tab === 'close' && <CashClose orders={orders} role="cashier" />}
         {tab === 'out' && <Availability />}
       </main>
     </div>

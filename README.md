@@ -53,3 +53,6 @@ Note:
 3. **Netlify:** "Add new site → Import from Git" e scegli il repository. Build e cartella (`npm run build`, `dist`) sono già in `netlify.toml`. In *Site configuration → Environment variables* aggiungi `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (Supabase → Project Settings → API; la chiave "anon/publishable", mai la "service_role").
 4. Dopo il primo deploy: in Supabase → Authentication → URL Configuration inserisci l'indirizzo del sito; disattiva le registrazioni pubbliche.
 Ogni modifica caricata su GitHub ripubblica il sito da sola.
+
+## Contenuti e foto (proprietà)
+Scheda **Contenuti app**: foto di copertina e dei servizi, storia, galleria, invito/indirizzo/telefono (IT/EN). In **Menu e prezzi**: foto per ogni prodotto e interruttore generale "Mostra le foto dei prodotti" (spento di default). Le foto richiedono Supabase Storage (vedi `supabase/README.md`).

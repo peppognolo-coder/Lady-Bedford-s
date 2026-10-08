@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { api, type OrderStatus } from './api'
 import { useCatalog, sortMenu, hoursLabel, isOpenNow } from './catalog'
-import { TX, CATS, CHAPTERS, GALLERY, TABS, IMG, eur, type Lang, type Screen } from './data'
+import { ALLERGENS, allergenName } from './allergens'
+import { chaptersOf, galleryOf, galleryH, imageOf } from './content'
+import type { Content } from './api/types'
+import { TX, CATS, TABS, IMG, eur, type Lang, type Screen } from './data'
 
 /* ---------- icone (Lucide) ---------- */
 const P: Record<string, ReactNode> = {
@@ -58,6 +61,8 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(() => (ss.get('lb:entered') ? fromHash() : 'invite'))
   const [prev, setPrev] = useState<Screen>('home')
   const [cat, setCat] = useState('tea')
+  const [avoid, setAvoid] = useState<string[]>([])
+  const [allergyOpen, setAllergyOpen] = useState(false)
   const [slot, setSlot] = useState(1)
   const [nameTouched, setNameTouched] = useState(false)
   const [dialog, setDialog] = useState<string | null>(null)
@@ -139,13 +144,14 @@ export default function App() {
     }
   }
 
+  const menuList = menu.filter(m => m.cat === cat && (!avoid.length || (m.allergens != null && !m.allergens.some(a => avoid.includes(a)))))
   const cartIds = Object.keys(p.cart).filter(id => byId[id])
   const count = cartIds.reduce((a, id) => a + p.cart[id], 0)
   const priceOf = (id: string) => byId[id]?.price ?? 0
   const soldOut = (id: string) => byId[id]?.available === false
   const total = cartIds.reduce((a, id) => a + priceOf(id) * p.cart[id], 0)
   const name = p.name.trim()
-  const loc = (id: string) => { const m = byId[id]; return { id, vg: m.vg, name: m.name[lang], desc: m.desc[lang], price: eur(m.price, lang) } }
+  const loc = (id: string) => { const m = byId[id]; return { id, vg: m.vg, name: m.name[lang], desc: m.desc[lang], price: eur(m.price, lang), photo: catalog.settings.show_product_photos ? m.photo || null : null, allergens: m.allergens ?? null } }
 
   const placeOrder = async () => {
     if (!name) { setNameTouched(true); return }
@@ -213,7 +219,7 @@ export default function App() {
       )}
 
       <main className="scroll" ref={scrollRef}>
-        {screen === 'invite' && <Invite t={t} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
+        {screen === 'invite' && <Invite t={t} inv={catalog.content.invite} lang={lang} onEnter={() => go('home')} seg={<LangSeg labels={['IT', 'EN']} />} />}
 
         {screen === 'home' && (
           <div className="fade" style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -223,7 +229,7 @@ export default function App() {
             </div>
             <div style={{ border: '1px solid var(--lb-green)', borderRadius: '160px 160px 4px 4px', padding: 6, position: 'relative' }}>
               <div className="plate" style={{ height: 300, position: 'relative', borderRadius: '154px 154px 2px 2px', overflow: 'hidden', borderColor: 'var(--lb-green-100)' }}>
-                <img className="imgslot" src={IMG.hero} alt={t.verandaCaption} style={{ objectPosition: '50% 30%' }} />
+                <img className="imgslot" src={imageOf(catalog.content, 'hero', IMG.hero)} alt={t.verandaCaption} style={{ objectPosition: '50% 30%' }} />
                 <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                   <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 3, marginLeft: -1.5, background: 'var(--lb-green-100)', opacity: 0.9 }} />
                   <div style={{ position: 'absolute', left: 0, right: 0, top: '46%', height: 3, background: 'var(--lb-green-100)', opacity: 0.9 }} />
@@ -268,6 +274,7 @@ export default function App() {
                 const m = loc(id)
                 return (
                   <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--color-divider)' }}>
+                    {m.photo && <img src={m.photo} alt="" loading="lazy" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 4, flex: 'none' }} />}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="h-serif" style={{ fontWeight: 600, fontSize: 17 }}>{m.name}</div>
                       <div style={{ fontSize: 11.5, color: 'var(--color-neutral-700)', marginTop: 2 }}>{m.desc}</div>
@@ -279,7 +286,7 @@ export default function App() {
               })}
             </div>
             <button onClick={() => go('story')} style={{ textAlign: 'left', background: 'transparent', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', padding: 0, cursor: 'pointer', display: 'grid', gridTemplateColumns: '110px 1fr', overflow: 'hidden' }}>
-              <div style={{ position: 'relative', height: 120 }}><img className="imgslot" src={IMG.portrait} alt="" /></div>
+              <div style={{ position: 'relative', height: 120 }}><img className="imgslot" src={imageOf(catalog.content, 'portrait', IMG.portrait)} alt="" /></div>
               <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
                 <div className="kicker">{t.homeStoryKicker}</div>
                 <div className="h-serif" style={{ fontWeight: 600, fontSize: 19, lineHeight: 1.15 }}>{t.homeStoryTitle}</div>
@@ -306,15 +313,34 @@ export default function App() {
                 <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><span className="pill vg">VG</span>{t.vegan}</span>
                 <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><span className="pill v">V</span>{t.vegetarian}</span>
               </div>
-              {menu.filter(m => m.cat === cat).map(({ id }) => {
+              <div style={{ marginBottom: 6 }}>
+                <button className="link" style={{ fontSize: 12 }} aria-expanded={allergyOpen} onClick={() => setAllergyOpen(o => !o)}>{t.allergenFilter}{avoid.length ? ` (${avoid.length})` : ''} {allergyOpen ? '▴' : '▾'}</button>
+                {allergyOpen && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--color-neutral-700)' }}>{t.allergenWithout}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {ALLERGENS.map(a => (
+                        <button key={a.id} aria-pressed={avoid.includes(a.id)} onClick={() => setAvoid(v => (v.includes(a.id) ? v.filter(x => x !== a.id) : [...v, a.id]))}
+                          style={{ padding: '5px 10px', borderRadius: 14, fontSize: 11.5, cursor: 'pointer', background: avoid.includes(a.id) ? 'var(--lb-green-100)' : 'transparent', border: `1px solid ${avoid.includes(a.id) ? 'var(--lb-green)' : 'var(--color-divider)'}`, color: 'var(--color-text)' }}>{a[lang]}</button>
+                      ))}
+                    </div>
+                    {avoid.length > 0 && <div style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--color-neutral-700)' }}>{t.allergenOnlyDeclared}</div>}
+                  </div>
+                )}
+              </div>
+              {avoid.length > 0 && menuList.length === 0 && <p style={{ fontSize: 13, fontStyle: 'italic' }}>{t.allergenNoResult}</p>}
+              {menuList.map(({ id }) => {
                 const m = loc(id), q = p.cart[id] || 0
                 return (
-                  <div key={id} style={{ padding: '16px 0', borderTop: '1px solid var(--color-divider)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div key={id} style={{ padding: '16px 0', borderTop: '1px solid var(--color-divider)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    {m.photo && <img src={m.photo} alt="" loading="lazy" style={{ order: 2, width: 84, height: 84, objectFit: 'cover', borderRadius: 4, flex: 'none' }} />}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                       <div className="h-serif" style={{ fontWeight: 600, fontSize: 18.5, lineHeight: 1.15, flex: 1 }}>{m.name}</div>
                       <div className="tnum" style={{ fontSize: 13 }}>{m.price}</div>
                     </div>
                     <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--color-neutral-700)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{m.desc}</div>
+                    <div style={{ fontSize: 11, color: 'var(--color-neutral-700)' }}>{m.allergens == null ? t.allergenAsk : m.allergens.length === 0 ? t.allergenNone : `${t.allergenContains}: ${m.allergens.map(a => allergenName(a, lang).toLowerCase()).join(', ')}`}</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
                       <div style={{ display: 'flex', gap: 6 }}>
                         {m.vg ? <span className="pill vg">VG · {t.vegan}</span> : <span className="pill v">V · {t.vegetarian}</span>}
@@ -331,9 +357,11 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    </div>
                   </div>
                 )
               })}
+              <p style={{ margin: '14px 0 0', fontSize: 11, fontStyle: 'italic', color: 'var(--color-neutral-700)', borderTop: '1px solid var(--color-divider)', paddingTop: 12 }}>{t.allergenNote}</p>
             </div>
           </div>
         )}
@@ -344,17 +372,17 @@ export default function App() {
               <div className="h-serif tnum" style={{ fontWeight: 400, fontSize: 64, lineHeight: 1, color: 'var(--color-accent)' }}>1874</div>
               <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 18, lineHeight: 1.35, marginTop: 6 }}>{t.storyLead}</div>
             </div>
-            {CHAPTERS[lang].map(ch => (
+            {chaptersOf(catalog.content).map(ch => (
               <section key={ch.num} style={{ borderTop: '1px solid var(--color-divider)', padding: '22px 0 8px' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
                   <span className="h-serif tnum" style={{ fontSize: 15, color: 'var(--color-accent-700)' }}>{ch.num}</span>
-                  <span className="kicker" style={{ color: 'var(--lb-green-700)' }}>{ch.kicker}</span>
+                  <span className="kicker" style={{ color: 'var(--lb-green-700)' }}>{ch.kicker[lang]}</span>
                 </div>
-                <h3 className="h-serif" style={{ fontWeight: 600, fontSize: 25, lineHeight: 1.12, margin: '0 0 12px' }}>{ch.title}</h3>
-                {IMG.story[ch.num] && ch.img && (
-                  <div className="plate" style={{ height: 190, position: 'relative', marginBottom: 14 }}><img className="imgslot" src={IMG.story[ch.num]} alt={ch.img} loading="lazy" /></div>
+                <h3 className="h-serif" style={{ fontWeight: 600, fontSize: 25, lineHeight: 1.12, margin: '0 0 12px' }}>{ch.title[lang]}</h3>
+                {ch.image && (
+                  <div className="plate" style={{ height: 190, position: 'relative', marginBottom: 14 }}><img className="imgslot" src={ch.image} alt={ch.title[lang]} loading="lazy" /></div>
                 )}
-                <p style={{ margin: '0 0 12px', fontSize: 13.5, lineHeight: 1.65, textAlign: 'justify', hyphens: 'auto' }}>{ch.body}</p>
+                <p style={{ margin: '0 0 12px', fontSize: 13.5, lineHeight: 1.65, textAlign: 'justify', hyphens: 'auto' }}>{ch.body[lang]}</p>
               </section>
             ))}
             <div style={{ border: '1px solid var(--color-accent)', padding: 18, textAlign: 'center', marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
@@ -368,9 +396,9 @@ export default function App() {
           <div className="fade" style={{ padding: '18px 18px 30px', width: '100%' }}>
             <p className="h-serif" style={{ margin: '0 0 16px', fontStyle: 'italic', fontSize: 16, lineHeight: 1.4, color: 'var(--color-neutral-800)', textAlign: 'center' }}>{t.galleryIntro}</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
-              {GALLERY.map(g => (
-                <figure key={g.id} style={{ margin: 0, minWidth: 0, gridColumn: g.span }}>
-                  <div className="plate" style={{ position: 'relative', width: '100%', overflow: 'hidden', height: g.h }}>
+              {galleryOf(catalog.content).map(g => (
+                <figure key={g.id} style={{ margin: 0, minWidth: 0, gridColumn: g.wide ? 'span 2' : 'span 1' }}>
+                  <div className="plate" style={{ position: 'relative', width: '100%', overflow: 'hidden', height: galleryH(g) }}>
                     <img className="imgslot" src={g.src} alt={g[lang]} loading="lazy" />
                   </div>
                   <figcaption className="h-serif" style={{ fontStyle: 'italic', fontSize: 13, marginTop: 6, color: 'var(--color-neutral-800)' }}>{g[lang]}</figcaption>
@@ -385,7 +413,7 @@ export default function App() {
             <p className="h-serif" style={{ margin: 0, fontStyle: 'italic', fontSize: 16, lineHeight: 1.4, color: 'var(--color-neutral-800)' }}>{t.servicesIntro}</p>
             {catalog.services.filter(x => x.active).sort((x, y) => x.sort - y.sort).map(sv => ({ id: sv.id, kicker: sv.kicker[lang], title: sv.title[lang], body: sv.body[lang], price: sv.price[lang], cta: sv.cta[lang] })).map(s => (
               <article key={s.id} style={{ border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                {IMG.svc[s.id] && <div style={{ position: 'relative', height: 150, borderBottom: '1px solid var(--color-divider)' }}><img className="imgslot" src={IMG.svc[s.id]} alt={s.title} loading="lazy" /></div>}
+                {imageOf(catalog.content, 'svc:' + s.id, IMG.svc[s.id]) && <div style={{ position: 'relative', height: 150, borderBottom: '1px solid var(--color-divider)' }}><img className="imgslot" src={imageOf(catalog.content, 'svc:' + s.id, IMG.svc[s.id])} alt={s.title} loading="lazy" /></div>}
                 <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div className="kicker" style={{ color: 'var(--lb-green-700)' }}>{s.kicker}</div>
                   <h3 className="h-serif" style={{ fontWeight: 600, fontSize: 21, lineHeight: 1.15, margin: 0 }}>{s.title}</h3>
@@ -603,7 +631,7 @@ export default function App() {
 
 const tile = (border: string): CSSProperties => ({ textAlign: 'left', padding: '16px 14px', border: `1px solid ${border}`, background: 'transparent', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--color-text)', display: 'flex', flexDirection: 'column', gap: 6 })
 
-function Invite({ t, onEnter, seg }: { t: (typeof TX)['it']; onEnter: () => void; seg: ReactNode }) {
+function Invite({ t, inv, lang, onEnter, seg }: { t: (typeof TX)['it']; inv: Content['invite']; lang: Lang; onEnter: () => void; seg: ReactNode }) {
   return (
     <div className="fade" style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', padding: '16px 26px 34px' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{seg}</div>
@@ -611,15 +639,15 @@ function Invite({ t, onEnter, seg }: { t: (typeof TX)['it']; onEnter: () => void
         <div style={{ border: '1px solid var(--color-accent)', padding: 6, borderRadius: 2 }}>
           <div style={{ border: '1px solid var(--lb-green)', padding: '34px 24px 30px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div className="h-serif" style={{ width: 62, height: 62, borderRadius: '50%', border: '1px solid var(--color-accent)', display: 'grid', placeItems: 'center', fontStyle: 'italic', fontSize: 26, color: 'var(--color-accent-700)' }}>LB</div>
-            <div className="kicker" style={{ fontSize: 10, letterSpacing: '.2em' }}>{t.inviteKicker}</div>
-            <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 19, lineHeight: 1.35, color: 'var(--color-neutral-800)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{t.inviteLine1}</div>
+            <div className="kicker" style={{ fontSize: 10, letterSpacing: '.2em' }}>{inv.kicker?.[lang] || t.inviteKicker}</div>
+            <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 19, lineHeight: 1.35, color: 'var(--color-neutral-800)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{inv.line1?.[lang] || t.inviteLine1}</div>
             <h1 className="h-serif" style={{ fontWeight: 400, fontSize: 40, lineHeight: 1, margin: 0 }}>Lady Bedford’s</h1>
-            <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 19, lineHeight: 1.35, color: 'var(--color-neutral-800)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{t.inviteLine2}</div>
+            <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 19, lineHeight: 1.35, color: 'var(--color-neutral-800)', textWrap: 'pretty' as CSSProperties['textWrap'] }}>{inv.line2?.[lang] || t.inviteLine2}</div>
             <div style={{ width: 40, height: 1, background: 'var(--color-accent)' }} />
-            <div className="tnum" style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--color-neutral-700)' }}>{t.inviteAddress}</div>
+            <div className="tnum" style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--color-neutral-700)' }}>{inv.address?.[lang] || t.inviteAddress}</div>
           </div>
         </div>
-        <p style={{ margin: '18px 4px 0', fontSize: 11, textAlign: 'center', color: 'var(--color-neutral-700)', fontStyle: 'italic' }}>{t.inviteRsvp}</p>
+        <p style={{ margin: '18px 4px 0', fontSize: 11, textAlign: 'center', color: 'var(--color-neutral-700)', fontStyle: 'italic' }}>{inv.rsvp?.[lang] || t.inviteRsvp}</p>
       </div>
       <button className="btn-o" onClick={onEnter}>{t.inviteCta}</button>
     </div>

@@ -1,5 +1,6 @@
 import type { Backoffice, Ingredient, Recipe, Unit } from './api/types'
 import { DEFAULT_COSTS } from './costs'
+import { DEMO_ING_ALLERGENS } from './allergens'
 
 // Dati di prova per la demo (NON sono le ricette vere della cuoca): servono solo a mostrare come funzionano scorte e costi.
 // [id, nome, unità, qtà confezione, prezzo confezione € (IVA esclusa), giacenza, soglia]
@@ -59,7 +60,7 @@ const METHOD: Record<string, [string, number]> = {
   short: ['Lavorare burro e zucchero a crema.\nUnire la farina e impastare rapidamente.\nRiposo 30 minuti in frigo, stendere a 1 cm, tagliare a dita.\nCuocere a 160 °C per 20 minuti.', 60],
 }
 export function demoBackoffice(): Backoffice {
-  const ingredients: Ingredient[] = ING.map(([id, name, unit, pack_qty, pack_price, stock, min_stock]) => ({ id, name, unit, pack_qty, pack_price, stock, min_stock }))
+  const ingredients: Ingredient[] = ING.map(([id, name, unit, pack_qty, pack_price, stock, min_stock]) => ({ id, name, unit, pack_qty, pack_price, stock, min_stock, allergens: DEMO_ING_ALLERGENS[id] ?? [] }))
   const recipes: Recipe[] = REC.map(([item_id, yld, lines]) => ({ item_id, yield: yld, lines: lines.map(([ingredient_id, qty]) => ({ ingredient_id, qty })), method: METHOD[item_id]?.[0], prep_min: METHOD[item_id]?.[1] }))
   return {
     ingredients, recipes, moves: [],

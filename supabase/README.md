@@ -1,8 +1,9 @@
-# Configurazione Supabase
+# Configurazione Supabase (in 5 passi)
 
-1. **Schema.** Nel progetto Supabase apri *SQL Editor* ed esegui `schema.sql` (si può rieseguire senza danni; non sovrascrive menu e servizi già modificati).
-2. **Account staff.** In *Authentication → Users → Add user* crea quattro utenti con *Auto Confirm User* attivo.
-   La password è il PIN: 6 cifre per cucina, cassa e sala, 8 per la proprietà (scegli PIN diversi). Le email non devono esistere davvero: la schermata staff le compone dal ruolo scelto.
+I file SQL sono in `supabase/sql/` e vanno eseguiti **in ordine** nello *SQL Editor* del progetto (incolla il contenuto, premi *Run*).
+
+1. **`01_schema.sql`** — crea tabelle, sicurezza, tempo reale, menu e servizi iniziali, archivio foto `media`. Si può rieseguire senza danni (non sovrascrive menu e servizi già modificati).
+2. **Crea i 4 utenti staff.** *Authentication → Users → Add user → Create new user*, con *Auto Confirm User* attivo. La password è il PIN: **6 cifre** per cucina, cassa e sala, **8 cifre** per la proprietà (diversi tra loro, non banali). Le email non devono esistere davvero.
 
    | Ruolo      | Email                            |
    |------------|----------------------------------|
@@ -11,19 +12,22 @@
    | Sala       | `waiter@staff.ladybedford.app`   |
    | Proprietà  | `owner@staff.ladybedford.app`    |
 
-3. **Assegna i ruoli.** Nello SQL Editor:
+3. **`02_ruoli_staff.sql`** — assegna i ruoli. L'ultima riga mostra i 4 ruoli assegnati: se ne vedi meno, manca un utente del passo 2.
+4. **Chiavi nell'app.** Su Netlify (*Site configuration → Environment variables*) aggiungi `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (*Project Settings → API*: Project URL e anon public key), poi rifai il deploy. In locale: copia `.env.example` in `.env`. Senza queste variabili l'app parte in **modalità demo**.
+5. **Disattiva le registrazioni pubbliche:** *Authentication → Sign In / Providers → Email → disattiva "Allow new users to sign up"*. Gli ordini dei clienti non richiedono account.
 
-   ```sql
-   insert into public.staff_roles (user_id, role)
-   select id, split_part(email, '@', 1) from auth.users
-   where email in ('kitchen@staff.ladybedford.app','cashier@staff.ladybedford.app','waiter@staff.ladybedford.app','owner@staff.ladybedford.app')
-   on conflict (user_id) do update set role = excluded.role;
-   ```
-   (`split_part` ricava `kitchen`, `cashier`, `waiter`, `owner` dalla parte prima della @.)
-4. **Chiavi nell'app.** Copia `.env.example` in `.env` e inserisci *Project URL* e *anon public key* (*Project Settings → API*).
-   Senza queste variabili l'app parte in **modalità demo** (dati nel browser).
-5. **Disattiva le registrazioni pubbliche:** *Authentication → Sign In / Providers → Email → disattiva "Allow new users to sign up"*.
-   Gli ordini dei clienti non richiedono account.
+Dopo il deploy, in *Authentication → URL Configuration* imposta *Site URL* sull'indirizzo del sito Netlify.
+
+## Allergeni, backup, chiusura di cassa
+- **Allergeni:** i 14 allergeni UE si dichiarano per prodotto (*Menu e prezzi → Modifica*), anche calcolati dagli ingredienti della ricetta (si assegnano in *Ricettario → Ingredienti*). I clienti li vedono nel menu e possono filtrare. Finché un prodotto non ha allergeni dichiarati, l'app scrive "chiedi al personale".
+- **Backup:** scheda *Dati e backup* → "Scarica backup completo" (un file JSON con tutto). Fallo ogni settimana e conservalo fuori dal dispositivo. Il piano gratuito di Supabase **non include backup automatici**, quindi questo è importante. Il ripristino riporta menu, ricette, impostazioni e contenuti; ordini e giacenze non vengono toccati.
+- **Chiusura di cassa:** la cassa chiude la giornata dalla scheda *Chiusura* (contanti contati, fondo per domani, differenza). La proprietà vede lo storico in *Chiusure cassa*. Tabella `cash_closures` (già in `01_schema.sql`). Non sostituisce la chiusura fiscale del registratore telematico.
+
+## Cambio PIN
+La proprietà cambia i PIN dalla scheda **PIN di accesso** (funzione `set_staff_pin`, inclusa in `01_schema.sql`: solo la proprietà può usarla, il PIN viene salvato come hash e le sessioni del ruolo vengono chiuse). Il PIN dimenticato dalla proprietà stessa si reimposta dal pannello Supabase (*Authentication → Users*).
+
+## Foto e contenuti
+Le foto caricate dalla proprietà (scheda *Contenuti app* e foto dei prodotti) vanno nell'archivio `media` (pubblico in lettura, scrittura solo proprietà, max 5 MB, WebP/JPEG/PNG; l'app le ridimensiona prima). Testi, galleria e invito sono salvati nella riga `content` di `settings`. L'interruttore "Mostra le foto dei prodotti" è in *Menu e prezzi*.
 
 ## Chi può fare cosa (imposto dal database, non solo dall'interfaccia)
 - **Clienti:** vedono menu, servizi e orari; ordinano con `place_order` (prezzi sempre ricalcolati sul server).

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, type L, type MenuItem, type Service } from '../api'
+import { api, type L, type MenuItem, type Service, type Settings } from '../api'
 import { useCatalog, sortMenu } from '../catalog'
 import { CATS } from '../data'
 import { Field, Switch, money } from './shared'
@@ -7,8 +7,15 @@ import { SettingsTab, SalesTab } from './OwnerMore'
 import StockTab from './Stock'
 import RecipesTab from './Recipes'
 import CostsTab from './CostsTab'
+import ContentTab from './ContentTab'
+import PinsTab from './PinsTab'
+import BackupTab from './BackupTab'
+import ClosuresTab from './ClosuresTab'
+import { AllergenChips } from './AllergenPicker'
+import { fromRecipe, sortAllergens } from '../allergens'
+import { ImagePicker } from './ImagePicker'
 
-type Tab = 'menu' | 'recipes' | 'stock' | 'costs' | 'services' | 'settings' | 'sales'
+type Tab = 'menu' | 'recipes' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'closures' | 'settings' | 'sales'
 
 export default function Owner({ onLogout }: { onLogout: () => void }) {
   const { catalog, reload } = useCatalog()
@@ -20,7 +27,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
   const save = async (f: () => Promise<void>, ok = 'Salvato') => {
     try { setErr(null); await f(); await reload(); setFlash(ok); setTimeout(() => setFlash(null), 2200); return true } catch (e) { setErr((e as Error).message); return false }
   }
-  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['settings', 'Orari e impostazioni'], ['sales', 'Vendite']]
+  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Vendite']]
   return (
     <div className="st-shell">
       <header className="st-bar">
@@ -31,11 +38,15 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
       {err && <div className="st-alert" role="alert">{err}</div>}
       {flash && <div className="st-flash" role="status">{flash}</div>}
       <main className="st-main">
-        {tab === 'menu' && <MenuTab menu={catalog.menu} save={save} />}
+        {tab === 'menu' && <MenuTab menu={catalog.menu} settings={catalog.settings} save={save} />}
         {tab === 'recipes' && <RecipesTab />}
         {tab === 'stock' && <StockTab />}
         {tab === 'costs' && <CostsTab onPriceSaved={() => void reload()} />}
         {tab === 'services' && <ServicesTab services={catalog.services} save={save} />}
+        {tab === 'content' && <ContentTab key={JSON.stringify(catalog.content).length} catalog={catalog} save={save} />}
+        {tab === 'closures' && <ClosuresTab />}
+        {tab === 'backup' && <BackupTab />}
+        {tab === 'pins' && <PinsTab />}
         {tab === 'settings' && <SettingsTab catalog={catalog} save={save} />}
         {tab === 'sales' && <SalesTab />}
       </main>
@@ -48,7 +59,7 @@ const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 const toNum = (t: string) => parseFloat(t.replace(',', '.'))
 
 /* ---------- menu ---------- */
-function MenuTab({ menu, save }: { menu: MenuItem[]; save: Save }) {
+function MenuTab({ menu, settings, save }: { menu: MenuItem[]; settings: Settings; save: Save }) {
   const [cat, setCat] = useState('tea')
   const [edit, setEdit] = useState<MenuItem | null>(null)
   const [isNew, setIsNew] = useState(false)
@@ -65,6 +76,9 @@ function MenuTab({ menu, save }: { menu: MenuItem[]; save: Save }) {
       <div className="st-rowline" style={{ justifyContent: 'space-between' }}>
         <div className="st-chips" role="tablist">{CATS.map(c => <button key={c.id} role="tab" aria-selected={cat === c.id} onClick={() => { setCat(c.id); setEdit(null) }}>{c.it}</button>)}</div>
         <button className="st-act" style={{ minHeight: 44, fontSize: 16 }} onClick={() => { setEdit(blank()); setIsNew(true) }}>Nuovo prodotto</button>
+      </div>
+      <div className="st-rowline">
+        <Switch on={!!settings.show_product_photos} onChange={v => void save(() => api.saveSettings({ ...settings, show_product_photos: v }), v ? 'Foto prodotti attivate' : 'Foto prodotti disattivate')} label="Mostra le foto dei prodotti nell’app dei clienti" />
       </div>
       {edit && <MenuForm key={edit.id || 'new'} item={edit} isNew={isNew} onCancel={() => setEdit(null)} onSave={async m => { if (await save(() => api.saveMenuItem(m))) setEdit(null) }} />}
       <ul className="st-rows">
@@ -115,6 +129,17 @@ function MenuForm({ item, isNew, onSave, onCancel }: { item: MenuItem; isNew: bo
         <Field label="Prezzo (€)" id="m-price"><input id="m-price" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="6,50" /></Field>
         <Field label="Categoria" id="m-cat">
           <select id="m-cat" value={m.cat} onChange={e => setM({ ...m, cat: e.target.value })}>{CATS.map(c => <option key={c.id} value={c.id}>{c.it}</option>)}</select>
+        </Field>
+        <Field label="Foto del prodotto" id="m-photo" hint="Si vede nell’app solo se l’interruttore “Mostra le foto dei prodotti” è acceso."><ImagePicker value={m.photo} folder="products" max={800} label="Foto prodotto" ratio="1 / 1" onChange={u => setM(o => ({ ...o, photo: u }))} /></Field>
+        <Field label="Allergeni" id="m-all" hint="Obbligatori per legge. Finché non li dichiari, l’app mostra “chiedi al personale”.">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Switch on={m.allergens != null} onChange={v => setM(o => ({ ...o, allergens: v ? [] : null }))} label="Allergeni verificati e dichiarati" />
+            {m.allergens != null && <>
+              <AllergenChips value={m.allergens} onChange={v => setM(o => ({ ...o, allergens: sortAllergens(v) }))} />
+              <div><button type="button" className="st-ghost" onClick={async () => { const bo = await api.getBackoffice(); const r = bo.recipes.find(x => x.item_id === m.id); if (!r) return setErr('Questo prodotto non ha ancora una ricetta.'); setErr(null); setM(o => ({ ...o, allergens: fromRecipe(r, bo.ingredients) })) }}>Calcola dagli ingredienti della ricetta</button></div>
+              {m.allergens.length === 0 && <small>Nessun allergene: l’app scriverà “Non contiene allergeni dichiarati”.</small>}
+            </>}
+          </div>
         </Field>
         <div className="st-switches">
           <Switch on={m.vg} onChange={v => setM({ ...m, vg: v })} label="Vegano" />

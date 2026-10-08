@@ -1,3 +1,4 @@
+import { AllergenChips } from './AllergenPicker'
 import { useState } from 'react'
 import { api, type Ingredient, type MenuItem, type Recipe, type Unit } from '../api'
 import { useCatalog, sortMenu } from '../catalog'
@@ -111,6 +112,7 @@ function IngredientForm({ ing, isNew, onSave, onCancel, onDelete }: { ing: Ingre
         <Field label="Prezzo della confezione (€, IVA esclusa)" id="i-pp"><input id="i-pp" inputMode="decimal" value={pp} onChange={e => setPp(e.target.value)} /></Field>
         <Field label={`Giacenza attuale (${i.unit})`} id="i-st" hint={isNew ? 'Quanto ne hai in dispensa all’apertura.' : 'Per correggerla usa “Conta” in Scorte, così resta traccia.'}><input id="i-st" inputMode="decimal" value={st} onChange={e => setSt(e.target.value)} disabled={!isNew} /></Field>
         <Field label={`Soglia di riordino (${i.unit})`} id="i-mn" hint="Sotto questa quantità finisce nella lista della spesa."><input id="i-mn" inputMode="decimal" value={mn} onChange={e => setMn(e.target.value)} /></Field>
+        <Field label="Allergeni contenuti" id="i-all" hint="Servono per calcolare in automatico gli allergeni dei piatti."><AllergenChips value={i.allergens ?? []} onChange={v => setI({ ...i, allergens: v })} /></Field>
         <Field label="Fornitore (facoltativo)" id="i-sup"><input id="i-sup" value={i.supplier || ''} onChange={e => setI({ ...i, supplier: e.target.value })} maxLength={60} /></Field>
       </div>
       {err && <div className="st-alert inline" role="alert">{err}</div>}
