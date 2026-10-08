@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AlertsButton, useAlerts, useLowStock } from './alerts'
 import { api, type L, type MenuItem, type Service, type Settings } from '../api'
 import { useCatalog, sortMenu } from '../catalog'
 import { CATS } from '../data'
@@ -21,7 +22,9 @@ type Tab = 'menu' | 'recipes' | 'stock' | 'costs' | 'services' | 'content' | 'pi
 
 export default function Owner({ onLogout }: { onLogout: () => void }) {
   const { catalog, reload } = useCatalog()
-  const bookings = useBookings()
+  const alerts = useAlerts()
+  const bookings = useBookings(f => alerts.play('booking', f.map(b => `${b.name} · ${b.party} pers.`).join(', ')))
+  const lowStock = useLowStock(alerts)
   const [tab, setTab] = useState<Tab>('menu')
   const [flash, setFlash] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -35,8 +38,8 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
     <div className="st-shell">
       <header className="st-bar">
         <div className="st-brand"><span className="st-mono">LB</span><div><div className="st-kicker">Proprietà</div><div className="st-title">Gestione del locale</div></div></div>
-        <nav className="st-tabs" aria-label="Sezioni">{tabs.map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}{id === 'bookings' && bookings.pending > 0 && <i className="st-dot">{bookings.pending}</i>}</button>)}</nav>
-        <div className="st-tools"><button className="st-ghost" onClick={onLogout}>Esci</button></div>
+        <nav className="st-tabs" aria-label="Sezioni">{tabs.map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}{id === 'bookings' && bookings.pending > 0 && <i className="st-dot">{bookings.pending}</i>}{id === 'stock' && lowStock.length > 0 && <i className="st-dot" aria-label={`${lowStock.length} sotto scorta`}>{lowStock.length}</i>}</button>)}</nav>
+        <div className="st-tools"><AlertsButton alerts={alerts} /><button className="st-ghost" onClick={onLogout}>Esci</button></div>
       </header>
       {err && <div className="st-alert" role="alert">{err}</div>}
       {flash && <div className="st-flash" role="status">{flash}</div>}

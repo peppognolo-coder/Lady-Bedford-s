@@ -48,30 +48,6 @@ export function useOrders(onNew?: (o: Order[]) => void, onReady?: (o: Order[]) =
   return { orders, error, loaded, reload: load }
 }
 
-export function useBeep() {
-  const [on, setOn] = useState(false)
-  const ctx = useRef<AudioContext | null>(null)
-  const enable = () => {
-    try {
-      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      ctx.current = ctx.current || new AC()
-      void ctx.current.resume()
-      setOn(true)
-    } catch { /* audio non disponibile */ }
-  }
-  const play = () => {
-    const c = ctx.current; if (!on || !c) return
-    ;[0, 0.22].forEach((d, i) => {
-      const o = c.createOscillator(), g = c.createGain()
-      o.frequency.value = i ? 880 : 660; o.connect(g); g.connect(c.destination)
-      g.gain.setValueAtTime(0.0001, c.currentTime + d); g.gain.exponentialRampToValueAtTime(0.25, c.currentTime + d + 0.02)
-      g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + d + 0.2)
-      o.start(c.currentTime + d); o.stop(c.currentTime + d + 0.22)
-    })
-  }
-  return { on, enable, play }
-}
-
 /** Tiene lo schermo acceso (tablet in cucina). */
 export function useWakeLock() {
   useEffect(() => {

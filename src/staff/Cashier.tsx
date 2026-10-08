@@ -3,17 +3,19 @@ import { api, type Order, type PayMethod } from '../api'
 import Pos from './Pos'
 import CashClose from './CashClose'
 import BookingsTab, { useBookings } from './BookingsTab'
-import { Availability, OrderHeader, money, pad, serveOrder, settleOrder, useBeep, useNow, useOrders } from './shared'
+import { Availability, OrderHeader, money, pad, serveOrder, settleOrder, useNow, useOrders } from './shared'
+import { AlertsButton, useAlerts, useReadyReminder } from './alerts'
 
 type Tab = 'orders' | 'tables' | 'pos' | 'day' | 'book' | 'close' | 'out'
 const STATUS_LABEL = { new: 'In coda', preparing: 'In preparazione', ready: 'Pronto', served: 'Servito', completed: 'Consegnato', cancelled: 'Annullato' } as const
 const PAY_LABEL: Record<PayMethod, string> = { cash: 'Contanti', card: 'Carta' }
 
 export default function Cashier({ onLogout }: { onLogout: () => void }) {
-  const beep = useBeep()
-  const { orders, error, reload } = useOrders(() => beep.play())
+  const alerts = useAlerts()
+  const { orders, error, reload } = useOrders(() => alerts.play('order'), ready => alerts.play('ready', ready.map(o => `Ordine ${pad(o.number)}`).join(', ')))
   const now = useNow(15000)
-  const bookings = useBookings()
+  const bookings = useBookings(f => alerts.play('booking', f.map(b => `${b.name} · ${b.party} pers.`).join(', ')))
+  useReadyReminder(orders, alerts, o => o.payment_status === 'unpaid' || !o.table_label)
   const [tab, setTab] = useState<Tab>('orders')
   const [err, setErr] = useState<string | null>(null)
   const open = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
@@ -35,7 +37,7 @@ export default function Cashier({ onLogout }: { onLogout: () => void }) {
           <button aria-pressed={tab === 'out'} onClick={() => setTab('out')}>Esaurito</button>
         </nav>
         <div className="st-tools">
-          <button className="st-ghost" aria-pressed={beep.on} onClick={beep.enable}>{beep.on ? 'Suono attivo' : 'Attiva suono'}</button>
+          <AlertsButton alerts={alerts} />
           <button className="st-ghost" onClick={onLogout}>Esci</button>
         </div>
       </header>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import type { Booking, BookingStatus } from '../api/types'
 import { KIND_LABEL, STATUS_LABEL, isoDay } from '../booking'
@@ -6,11 +6,19 @@ import { useCatalog } from '../catalog'
 import { Field } from './shared'
 
 /** Prenotazioni da oggi ai prossimi 90 giorni, aggiornate in tempo reale. */
-export function useBookings() {
+export function useBookings(onNew?: (fresh: Booking[]) => void) {
   const [list, setList] = useState<Booking[]>([])
+  const seen = useRef<Set<string> | null>(null)
+  const cb = useRef(onNew); cb.current = onNew
   const [error, setError] = useState<string | null>(null)
   const load = useCallback(async () => {
-    try { const a = new Date(), b = new Date(); b.setDate(b.getDate() + 90); setList(await api.listBookings(isoDay(a), isoDay(b))); setError(null) } catch (e) { setError((e as Error).message) }
+    try {
+      const a = new Date(), b = new Date(); b.setDate(b.getDate() + 90)
+      const next = await api.listBookings(isoDay(a), isoDay(b)); setList(next); setError(null)
+      const pend = next.filter(x => x.status === 'pending')
+      if (seen.current) { const fresh = pend.filter(x => !seen.current!.has(x.id)); if (fresh.length) cb.current?.(fresh) }
+      seen.current = new Set(pend.map(x => x.id))
+    } catch (e) { setError((e as Error).message) }
   }, [])
   useEffect(() => {
     void load(); const off = api.subscribe(() => void load()); const t = setInterval(() => void load(), 15000)

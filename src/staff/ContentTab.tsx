@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { api, type Catalog, type L } from '../api'
 import type { Chapter, Content, GalleryItem } from '../api/types'
-import { chaptersOf, galleryOf } from '../content'
+import { SOCIALS, chaptersOf, galleryOf, socialUrl } from '../content'
 import { IMG } from '../data'
 import { Field, Switch } from './shared'
 import { ImagePicker } from './ImagePicker'
 
 type Save = (f: () => Promise<void>, ok?: string) => Promise<boolean>
-type Sec = 'foto' | 'storia' | 'galleria' | 'invito'
+type Sec = 'foto' | 'storia' | 'galleria' | 'invito' | 'social'
 const uid = () => Math.random().toString(36).slice(2, 9)
 const swap = <T,>(a: T[], i: number, d: -1 | 1) => { const j = i + d; if (j < 0 || j >= a.length) return a; const c = [...a];[c[i], c[j]] = [c[j], c[i]]; return c }
 
@@ -17,7 +17,7 @@ export default function ContentTab({ catalog, save }: { catalog: Catalog; save: 
   const [dirty, setDirty] = useState(false)
   const upd = (f: (o: Content) => Content) => { setC(f); setDirty(true) }
   const setImg = (slot: string, url: string | null) => upd(o => { const images = { ...o.images }; if (url) images[slot] = url; else delete images[slot]; return { ...o, images } })
-  const secs: [Sec, string][] = [['foto', 'Foto principali'], ['storia', 'Storia'], ['galleria', 'Galleria'], ['invito', 'Invito e contatti']]
+  const secs: [Sec, string][] = [['foto', 'Foto principali'], ['storia', 'Storia'], ['galleria', 'Galleria'], ['invito', 'Invito e contatti'], ['social', 'Social']]
   const chapters = chaptersOf(c), gallery = galleryOf(c)
   const setCh = (i: number, p: Partial<Chapter>) => upd(o => ({ ...o, chapters: chaptersOf(o).map((x, k) => (k === i ? { ...x, ...p } : x)) }))
   const setGa = (i: number, p: Partial<GalleryItem>) => upd(o => ({ ...o, gallery: galleryOf(o).map((x, k) => (k === i ? { ...x, ...p } : x)) }))
@@ -97,6 +97,23 @@ export default function ContentTab({ catalog, save }: { catalog: Catalog; save: 
         </section>
       )}
 
+      {sec === 'social' && (
+        <section className="st-sheet">
+          <h2 className="st-h3">Social e contatti</h2>
+          <p className="st-hint">Compaiono nell’app dei clienti, nella pagina d’invito e nella carta da visita. Lascia vuoto ciò che non usi.</p>
+          <div className="st-form">
+            {SOCIALS.map(s => {
+              const v = c.social?.[s.id] ?? ''
+              const ok = !v.trim() || socialUrl(s.id, v)
+              return (
+                <Field key={s.id} label={s.label} id={`so-${s.id}`} hint={ok ? s.hint : 'Non riconosco questo valore: controlla il link o il nome.'}>
+                  <input id={`so-${s.id}`} value={v} maxLength={200} autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={!ok} onChange={e => upd(o => ({ ...o, social: { ...o.social, [s.id]: e.target.value } }))} />
+                </Field>
+              )
+            })}
+          </div>
+        </section>
+      )}
       {sec === 'invito' && (
         <section className="st-sheet">
           <h2 className="st-h3">Pagina d’invito e contatti</h2>

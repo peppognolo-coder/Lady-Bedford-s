@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { api, type Order, type Status } from '../api'
 import StockTab from './Stock'
 import CookRecipes from './CookRecipes'
-import { Availability, OrderHeader, useBeep, useNow, useOrders, useWakeLock } from './shared'
+import { Availability, OrderHeader, useNow, useOrders, useWakeLock } from './shared'
+import { AlertsButton, useAlerts, useLowStock } from './alerts'
 
 const COLS: { id: Status; title: string; action?: { label: string; next: Status } }[] = [
   { id: 'new', title: 'Da preparare', action: { label: 'Inizia', next: 'preparing' } },
@@ -12,8 +13,9 @@ const COLS: { id: Status; title: string; action?: { label: string; next: Status 
 const CAT_LABEL: Record<string, string> = { tea: 'Tè', pastry: 'Dolci', savoury: 'Salato', hamper: 'Cestini', mocktail: 'Analcolici' }
 
 export default function Kitchen({ onLogout }: { onLogout: () => void }) {
-  const beep = useBeep()
-  const { orders, error } = useOrders(() => beep.play())
+  const alerts = useAlerts()
+  const { orders, error } = useOrders(fresh => alerts.play('order', fresh.map(o => o.items.map(i => `${i.qty}× ${i.name}`).join(', ')).join(' · ')))
+  const lowStock = useLowStock(alerts)
   const now = useNow(15000)
   const [tab, setTab] = useState<'board' | 'out' | 'stock' | 'recipes'>('board')
   const [col, setCol] = useState<Status>('new')
@@ -32,11 +34,11 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
         <nav className="st-tabs" aria-label="Sezioni">
           <button aria-pressed={tab === 'board'} onClick={() => setTab('board')}>Ordini</button>
           <button aria-pressed={tab === 'out'} onClick={() => setTab('out')}>Esaurito</button>
-          <button aria-pressed={tab === 'stock'} onClick={() => setTab('stock')}>Scorte</button>
+          <button aria-pressed={tab === 'stock'} onClick={() => setTab('stock')}>Scorte{lowStock.length > 0 && <i className="st-dot" aria-label={`${lowStock.length} sotto scorta`}>{lowStock.length}</i>}</button>
           <button aria-pressed={tab === 'recipes'} onClick={() => setTab('recipes')}>Ricettario</button>
         </nav>
         <div className="st-tools">
-          <button className="st-ghost" aria-pressed={beep.on} onClick={beep.enable}>{beep.on ? 'Suono attivo' : 'Attiva suono'}</button>
+          <AlertsButton alerts={alerts} />
           <button className="st-ghost" onClick={onLogout}>Esci</button>
         </div>
       </header>
