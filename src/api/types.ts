@@ -42,6 +42,15 @@ export interface Settings {
   butler: L                // consiglio del giorno
   tables: number           // numero di tavoli in sala
   show_product_photos?: boolean // mostra nel menu dell'app le foto dei prodotti che ne hanno una
+  schedules?: Record<string, Schedule>   // menu stagionale: id prodotto, oppure 'cat:<id sezione>'
+}
+/** Quando un prodotto o una sezione è in menu. Campi vuoti = nessun limite. */
+export interface Schedule {
+  from?: string; to?: string   // 'YYYY-MM-DD'
+  yearly?: boolean             // ogni anno: l'anno delle date viene ignorato
+  days?: number[]              // 0 = domenica … 6 = sabato; vuoto = tutti
+  start?: string; end?: string // fascia oraria 'HH:MM'
+  teaser?: boolean             // fuori periodo resta visibile ma non ordinabile, con la nota "dal …"
 }
 /* ---------- ricettario, scorte, costi ---------- */
 export type Unit = 'g' | 'ml' | 'pz'
