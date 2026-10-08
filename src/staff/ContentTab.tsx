@@ -126,6 +126,11 @@ export default function ContentTab({ catalog, save }: { catalog: Catalog; save: 
                 </Field>
               ))
             ))}
+            {(['it', 'en'] as const).map(lang => (
+              <Field key={'loy' + lang} label={`Testo tessera fedeltà cartacea (${lang.toUpperCase()})`} id={`i-loy-${lang}`}>
+                <textarea id={`i-loy-${lang}`} rows={3} value={c.loyalty?.[lang] ?? ''} onChange={e => upd(o => ({ ...o, loyalty: { it: '', en: '', ...o.loyalty, [lang]: e.target.value } }))} />
+              </Field>
+            ))}
           </div>
         </section>
       )}
