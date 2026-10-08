@@ -36,13 +36,16 @@ function Icon({ n, size = 18, sw = 1.5 }: { n: keyof typeof P; size?: number; sw
 
 /* ---------- stato persistente ---------- */
 type PastOrder = { title: string; meta: string; total: string }
-type Persist = { lang: Lang; name: string; stamps: number; orderNo: number; lastOrder?: { id: string; number: number } | null; cart: Record<string, number>; past: { lines: string; date: string; slot: string; total: number }[] }
+type Persist = { lang: Lang; name: string; phone: string; orderNo: number; lastOrder?: { id: string; number: number } | null; cart: Record<string, number>; past: { lines: string; date: string; slot: string; total: number }[] }
 const KEY = 'lady-bedford:v1'
-const initial: Persist = { lang: 'it', name: 'Beatrice', stamps: 6, orderNo: 47, cart: {}, past: [] }
+const initial: Persist = { lang: 'it', name: '', phone: '', orderNo: 0, cart: {}, past: [] }
 function load(): Persist {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return { ...initial, ...JSON.parse(raw) }
+    if (raw) {
+      const { stamps: _s, ...old } = JSON.parse(raw) as Partial<Persist> & { stamps?: number }
+      return { ...initial, ...old, name: old.name === 'Beatrice' ? '' : old.name ?? '' }
+    }
   } catch { /* storage non disponibile */ }
   const nav = typeof navigator !== 'undefined' ? navigator.language : 'it'
   return { ...initial, lang: nav.toLowerCase().startsWith('it') ? 'it' : 'en' }
@@ -69,6 +72,7 @@ export default function App() {
   const [allergyOpen, setAllergyOpen] = useState(false)
   const [slot, setSlot] = useState(1)
   const [nameTouched, setNameTouched] = useState(false)
+  const [phoneTouched, setPhoneTouched] = useState(false)
   const [dialog, setDialog] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [last, setLast] = useState({ total: 0, slot: '' })
@@ -183,18 +187,20 @@ export default function App() {
   const soldOut = (id: string) => byId[id]?.available === false
   const total = cartIds.reduce((a, id) => a + priceOf(id) * p.cart[id], 0)
   const name = p.name.trim()
+  const phone = p.phone.replace(/[^\d+]/g, '')
+  const phoneOk = /^\+?\d{7,15}$/.test(phone)
   const loc = (id: string) => { const m = byId[id]; return { id, vg: m.vg, name: m.name[lang], desc: m.desc[lang], price: eur(m.price, lang), photo: catalog.settings.show_product_photos ? m.photo || null : null, allergens: m.allergens ?? null } }
 
   const placeOrder = async () => {
-    if (!name) { setNameTouched(true); return }
+    if (!name || !phoneOk) { setNameTouched(true); setPhoneTouched(true); return }
     const ids = cartIds
     if (!ids.length || placing) return
     setPlacing(true); setOrderErr(null)
     try {
-      const res = await api.placeOrder({ customer_name: name, pickup_slot: slotValue, items: ids.map(id => ({ item_id: id, qty: p.cart[id] })) })
+      const res = await api.placeOrder({ customer_name: name, pickup_slot: slotValue, note: `Tel. ${phone}`, items: ids.map(id => ({ item_id: id, qty: p.cart[id] })) })
       const lines = ids.map(id => `${p.cart[id] > 1 ? p.cart[id] + '× ' : ''}${byId[id].name[lang]}`).join(', ')
       setLast({ total, slot: slotValue })
-      setP(o => ({ ...o, cart: {}, lastOrder: res, stamps: Math.min(10, o.stamps + 1), orderNo: res.number, past: [{ lines, date: new Date().toISOString(), slot: slotValue, total }, ...o.past].slice(0, 10) }))
+      setP(o => ({ ...o, cart: {}, lastOrder: res, orderNo: res.number, past: [{ lines, date: new Date().toISOString(), slot: slotValue, total }, ...o.past].slice(0, 10) }))
       setLive({ number: res.number, status: 'new', payment_status: 'unpaid' })
       setScreen('done')
     } catch (e) {
@@ -216,9 +222,6 @@ export default function App() {
       meta: `${new Date(o.date).toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB', { day: 'numeric', month: 'long' })} · ${lang === 'it' ? 'ritiro' : 'pickup'} ${o.slot}`,
       total: eur(o.total, lang),
     })),
-    ...(lang === 'it'
-      ? [{ title: 'Cestino per due', meta: '14 settembre · ritirato alle 17:00', total: '€ 32,00' }, { title: 'Scone e Lady Bedford Blend', meta: '2 settembre · ritirato alle 16:30', total: '€ 11,00' }]
-      : [{ title: 'Hamper for two', meta: '14 September · collected at 17:00', total: '€ 32.00' }, { title: 'Scone & Lady Bedford Blend', meta: '2 September · collected at 16:30', total: '€ 11.00' }]),
   ]
 
   const LangSeg = ({ labels, big }: { labels: [string, string]; big?: boolean }) => (
@@ -256,7 +259,7 @@ export default function App() {
         {screen === 'home' && (
           <div className="fade" style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 22 }}>
             <div>
-              <h1 className="h-serif" style={{ fontWeight: 400, fontSize: 34, lineHeight: 1.05, margin: 0 }}>{t.greet(name || (lang === 'it' ? 'ospite' : 'guest'))}</h1>
+              <h1 className="h-serif" style={{ fontWeight: 400, fontSize: 34, lineHeight: 1.05, margin: 0 }}>{t.greet(name)}</h1>
               <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--color-neutral-700)', lineHeight: 1.55 }}>{t.homeSub}</p>
             </div>
             <div style={{ border: '1px solid var(--lb-green)', borderRadius: '160px 160px 4px 4px', padding: 6, position: 'relative' }}>
@@ -294,7 +297,7 @@ export default function App() {
               <button className="tile" onClick={() => (catalog.booking.enabled ? setDialog('tea') : go('services'))} style={tile('var(--color-divider)')}>
                 <span style={{ color: 'var(--color-accent-700)' }}><Icon n="cup" size={20} /></span>
                 <span className="h-serif" style={{ fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>{t.homeTea}</span>
-                <span style={{ fontSize: 11, color: 'var(--color-neutral-700)' }}>{t.homeTeaSub}</span>
+                <span style={{ fontSize: 11, color: 'var(--color-neutral-700)' }}>{catalog.booking.enabled ? t.homeTeaSub : lang === 'it' ? 'Scoprite i servizi' : 'Discover our services'}</span>
               </button>
             </div>
             <MyBooking lang={lang} />
@@ -459,7 +462,7 @@ export default function App() {
                   <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--color-neutral-800)', textAlign: 'justify', hyphens: 'auto' }}>{s.body}</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                     <span className="tnum" style={{ fontSize: 12.5 }}>{s.price}</span>
-                    <button className="btn-o sm" onClick={() => setDialog(s.id)}>{s.cta}</button>
+                    {catalog.booking.enabled ? <button className="btn-o sm" onClick={() => setDialog(s.id)}>{s.cta}</button> : <span style={{ fontSize: 11.5, fontStyle: 'italic', color: 'var(--color-neutral-700)' }}>{t.bookOffline}</span>}
                   </div>
                 </div>
               </article>
@@ -470,30 +473,19 @@ export default function App() {
         {screen === 'profile' && (
           <div className="fade" style={{ padding: '20px 20px 30px', display: 'flex', flexDirection: 'column', gap: 22 }}>
             <div style={{ border: '1px solid var(--color-accent)', padding: 5, borderRadius: 3, boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ border: '1px solid var(--color-divider)', padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ border: '1px solid var(--color-divider)', padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div className="kicker">{t.cardKicker}</div>
-                    <div className="h-serif" style={{ fontWeight: 400, fontSize: 28, lineHeight: 1.1, marginTop: 4 }}>{name || '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--color-neutral-700)', marginTop: 2 }}>{t.memberSince}</div>
+                    <div className="kicker">{t.loyaltyKicker}</div>
+                    <div className="h-serif" style={{ fontWeight: 400, fontSize: 26, lineHeight: 1.1, marginTop: 4 }}>{t.loyaltyTitle}</div>
                   </div>
-                  <div className="h-serif" style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--color-accent)', display: 'grid', placeItems: 'center', fontStyle: 'italic', fontSize: 18, color: 'var(--color-accent-700)' }}>LB</div>
+                  <div className="h-serif" style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--color-accent)', display: 'grid', placeItems: 'center', fontStyle: 'italic', fontSize: 18, color: 'var(--color-accent-700)', flex: 'none' }}>LB</div>
                 </div>
                 <div className="rule" />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, justifyItems: 'center' }}>
-                  {Array.from({ length: 10 }, (_, i) => {
-                    const on = i < p.stamps
-                    return (
-                      <div key={i} style={{ width: 40, height: 40, borderRadius: '50%', display: 'grid', placeItems: 'center', border: `1px ${on ? 'solid' : 'dashed'} ${on ? 'var(--color-accent)' : 'var(--color-divider)'}`, color: on ? 'var(--color-accent-700)' : 'var(--color-neutral-400)', background: on ? 'var(--color-accent-100)' : 'transparent' }}>
-                        <Icon n="cupS" sw={1.4} />
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 15, textAlign: 'center', lineHeight: 1.35 }}>{t.stamps(p.stamps)}</div>
+                <div className="h-serif" style={{ fontStyle: 'italic', fontSize: 15, lineHeight: 1.4 }}>{catalog.content.loyalty?.[lang]?.trim() || t.loyaltyText}</div>
               </div>
             </div>
-            <div>
+            {pastOrders.length > 0 && <div>
               <h2 className="h-serif" style={{ fontWeight: 600, fontSize: 21, margin: '0 0 8px' }}>{t.pastOrders}</h2>
               {pastOrders.map((o, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderTop: '1px solid var(--color-divider)', fontSize: 12.5 }}>
@@ -501,7 +493,7 @@ export default function App() {
                   <div className="tnum" style={{ whiteSpace: 'nowrap', flex: 'none' }}>{o.total}</div>
                 </div>
               ))}
-            </div>
+            </div>}
             <div style={{ borderTop: '1px solid var(--color-divider)', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 13 }}>{t.language}</span>
               <LangSeg labels={['Italiano', 'English']} big />
@@ -569,6 +561,13 @@ export default function App() {
                 style={{ height: 46, padding: '0 12px', font: 'inherit', fontSize: 16, background: 'transparent', color: 'var(--color-text)', border: `1px solid ${nameTouched && !name ? 'var(--color-accent-700)' : 'var(--color-divider)'}`, borderRadius: 'var(--radius-md)', outline: 'none', caretColor: 'var(--color-accent)' }} />
               {nameTouched && !name && <span role="alert" style={{ fontSize: 11, color: 'var(--color-accent-800)', fontStyle: 'italic' }}>{t.nameError}</span>}
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor="tel" className="kicker">{t.phoneLabel}</label>
+              <input id="tel" type="tel" inputMode="tel" autoComplete="tel" value={p.phone} maxLength={20} onChange={e => { patch({ phone: e.target.value }); setPhoneTouched(true) }} placeholder={t.phonePh}
+                style={{ height: 46, padding: '0 12px', font: 'inherit', fontSize: 16, background: 'transparent', color: 'var(--color-text)', border: `1px solid ${phoneTouched && !phoneOk ? 'var(--color-accent-700)' : 'var(--color-divider)'}`, borderRadius: 'var(--radius-md)', outline: 'none', caretColor: 'var(--color-accent)' }} />
+              {phoneTouched && !phoneOk && <span role="alert" style={{ fontSize: 11, color: 'var(--color-accent-800)', fontStyle: 'italic' }}>{t.phoneError}</span>}
+              <span style={{ fontSize: 11, color: 'var(--color-neutral-700)' }}>{t.phoneNote}</span>
+            </div>
             <div>
               <div className="kicker" style={{ marginBottom: 10 }}>{t.payment}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 2px', borderTop: '1px solid var(--color-divider)' }}>
@@ -606,7 +605,7 @@ export default function App() {
         </nav>
       )}
 
-      {dialog && <BookingDialog kind={dialog} svcTitle={catalog.services.find(x => x.id === dialog)?.title[lang]} catalog={catalog} lang={lang} onClose={() => setDialog(null)} />}
+      {dialog && catalog.booking.enabled && <BookingDialog kind={dialog} svcTitle={catalog.services.find(x => x.id === dialog)?.title[lang]} catalog={catalog} lang={lang} onClose={() => setDialog(null)} />}
 
       {readyNote && (
         <div role="alert" className="fade" style={{ position: 'absolute', left: 14, right: 14, top: 'calc(10px + env(safe-area-inset-top))', zIndex: 20, background: 'var(--lb-green-900)', color: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 14, boxShadow: 'var(--shadow-md)' }}>
