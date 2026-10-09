@@ -56,3 +56,6 @@ Il PIN della **proprietà è di 8 cifre**, quello di cucina, sala e cassa di 6 (
 
 ## Personale e turni
 Visibili e modificabili **solo dalla proprietà** (scheda *Personale e turni*): persone con ruolo e ore da contratto, planner settimanale, assenze (riposo, ferie, permesso, malattia), straordinari e uscite anticipate, buchi di copertura e riepilogo ore. Tabelle `staff_members`, `staff_shifts`, `staff_config` con permessi riservati al ruolo `owner`: gli altri ruoli e gli anonimi non possono né leggerle né scriverle. Sono già in `01_schema.sql`: rieseguilo una volta. Personale e turni entrano anche nel backup completo e nel ripristino.
+
+## Categorie del menu libere (aggiornamento 3)
+Dalla scheda *Categorie* la proprietà aggiunge, rinomina, riordina ed elimina le sezioni del menu (per esempio "Cocktail con alcol"). Serve eseguire **una volta** `sql/03_categorie.sql` (toglie l'elenco fisso di cinque categorie). Per chi parte da zero, `01_schema.sql` e `schema.sql` sono già aggiornati. I prodotti si eliminano dalla scheda *Menu e prezzi* (con conferma); "Svuota menu di esempio" li cancella tutti in un colpo. Gli ordini già fatti restano nello storico.
