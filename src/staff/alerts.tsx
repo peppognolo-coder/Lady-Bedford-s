@@ -4,14 +4,15 @@ import { useBackoffice } from '../backoffice'
 import { flagTitle, playTune, systemNotify, unlockOnGesture, vibrate, type AlertKind } from '../alertsound'
 
 export type { AlertKind }
-export interface AlertPrefs { sound: boolean; volume: number; vibrate: boolean; system: boolean; kinds: Record<AlertKind, boolean> }
+export interface AlertPrefs { sound: boolean; volume: number; vibrate: boolean; popup: boolean; system: boolean; kinds: Record<AlertKind, boolean> }
 const KEY = 'lb:alerts'
-const DEFAULTS: AlertPrefs = { sound: true, volume: 0.7, vibrate: true, system: false, kinds: { order: true, ready: true, booking: true, stock: true } }
+const DEFAULTS: AlertPrefs = { sound: true, volume: 0.7, vibrate: true, popup: true, system: false, kinds: { order: true, ready: true, booking: true, stock: true, late: true } }
 export const KIND_TEXT: Record<AlertKind, { label: string; hint: string; title: string }> = {
   order: { label: 'Nuovi ordini', hint: 'Due note ascendenti', title: 'Nuovo ordine' },
   ready: { label: 'Ordini pronti da servire', hint: 'Tre note, ripetute se restano in attesa', title: 'Ordine pronto' },
   booking: { label: 'Nuove prenotazioni', hint: 'Campanella', title: 'Nuova prenotazione' },
   stock: { label: 'Scorte sotto soglia', hint: 'Due note discendenti', title: 'Scorta in esaurimento' },
+  late: { label: 'Ordini in ritardo sul ritiro', hint: 'Tre note rapide e una acuta', title: 'Ordine in ritardo' },
 }
 
 const read = (): AlertPrefs => {
@@ -110,6 +111,7 @@ export function AlertsButton({ alerts }: { alerts: Alerts }) {
           <div className="st-switches">
             <button type="button" className="st-switch" role="switch" aria-checked={prefs.sound} onClick={() => setPrefs({ sound: !prefs.sound })}><i /> Suono</button>
             <button type="button" className="st-switch" role="switch" aria-checked={prefs.vibrate} onClick={() => setPrefs({ vibrate: !prefs.vibrate })}><i /> Vibrazione</button>
+            <button type="button" className="st-switch" role="switch" aria-checked={prefs.popup} onClick={() => setPrefs({ popup: !prefs.popup })}><i /> Finestra a comparsa per i nuovi ordini (in Cucina)</button>
           </div>
           <label className="st-vol">Volume
             <input type="range" min={0.1} max={1} step={0.05} value={prefs.volume} onChange={e => setPrefs({ volume: Number(e.target.value) })} onPointerUp={() => play('order')} />

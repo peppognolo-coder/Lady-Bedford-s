@@ -51,6 +51,9 @@ export function SettingsTab({ catalog, save }: { catalog: Catalog; save: Save })
         <div className="st-chips">
           {s.slots.map(x => <span key={x} className="st-chip-x tnum">{x}<button aria-label={`Rimuovi ${x}`} onClick={() => setS(o => ({ ...o, slots: o.slots.filter(y => y !== x) }))}>✕</button></span>)}
         </div>
+        <div className="st-form two" style={{ marginBottom: 8 }}>
+          <Field label="Avviso ritardo in cucina (minuti prima del ritiro)" id="o-late" hint="Se l’ordine non è ancora iniziato a questo punto, la cucina riceve suono e finestra rossa."><input id="o-late" type="number" min={1} max={60} value={s.late_warn_min ?? 6} onChange={e => setS({ ...s, late_warn_min: Math.max(1, Math.min(60, Number(e.target.value) || 6)) })} /></Field>
+        </div>
         <div className="st-rowline">
           <input aria-label="Nuova fascia" type="time" value={slot} onChange={e => setSlot(e.target.value)} className="st-input-sm" />
           <button className="st-ghost" onClick={addSlot}>Aggiungi fascia</button>

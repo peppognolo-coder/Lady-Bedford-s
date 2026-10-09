@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type Order, type Status } from '../api'
 import StockTab from './Stock'
 import CookRecipes from './CookRecipes'
-import { Availability, OrderHeader, useNow, useOrders, useWakeLock } from './shared'
+import { Availability, OrderHeader, minsToSlot, useNow, useOrders, useWakeLock } from './shared'
+import { useCatalog } from '../catalog'
 import { AlertsButton, useAlerts, useLowStock } from './alerts'
+import NewOrderPopup from './NewOrderPopup'
 
 const COLS: { id: Status; title: string; action?: { label: string; next: Status } }[] = [
   { id: 'new', title: 'Da preparare', action: { label: 'Inizia', next: 'preparing' } },
@@ -14,9 +16,36 @@ const CAT_LABEL: Record<string, string> = { tea: 'Tè', pastry: 'Dolci', savoury
 
 export default function Kitchen({ onLogout }: { onLogout: () => void }) {
   const alerts = useAlerts()
-  const { orders, error } = useOrders(fresh => alerts.play('order', fresh.map(o => o.items.map(i => `${i.qty}× ${i.name}`).join(', ')).join(' · ')))
+  const [incoming, setIncoming] = useState<string[]>([])
+  const { orders, error } = useOrders(fresh => {
+    alerts.play('order', fresh.map(o => o.items.map(i => `${i.qty}× ${i.name}`).join(', ')).join(' · '))
+    if (alerts.prefs.popup) setIncoming(q => [...q, ...fresh.filter(o => o.status === 'new').map(o => o.id)])
+  })
   const lowStock = useLowStock(alerts)
   const now = useNow(15000)
+  const { catalog } = useCatalog()
+  const warn = catalog.settings.late_warn_min ?? 6
+  const [lateQ, setLateQ] = useState<string[]>([])
+  const warned = useRef(new Set<string>()), due = useRef(new Set<string>())
+  // ordini da asporto in ritardo: avviso con finestra se non sono ancora iniziati vicino al ritiro, suono se sono in preparazione all'ora del ritiro
+  useEffect(() => {
+    const check = () => {
+      const t = Date.now(), add: string[] = [], dueNow: string[] = []
+      for (const o of orders) {
+        const m = o.pickup_slot ? minsToSlot(o, t) : null
+        if (m === null) continue
+        if (o.status === 'new' && m <= warn && !warned.current.has(o.id)) { warned.current.add(o.id); add.push(o.id) }
+        if (o.status === 'preparing' && m <= 0 && !due.current.has(o.id)) { due.current.add(o.id); dueNow.push(o.id) }
+      }
+      if (add.length) { alerts.play('late', `${add.length} ordin${add.length === 1 ? 'e' : 'i'} da avviare: ritiro vicino`); if (alerts.prefs.popup) setLateQ(q => [...q, ...add]) }
+      else if (dueNow.length) alerts.play('late', 'Ritiro adesso: ordine ancora in preparazione')
+    }
+    check()
+    const iv = setInterval(check, 20000)
+    return () => clearInterval(iv)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, warn])
+  const lateNow = orders.filter(o => { const m = o.pickup_slot ? minsToSlot(o, now) : null; return m !== null && ((o.status === 'new' && m <= warn) || (o.status === 'preparing' && m <= 0)) })
   const [tab, setTab] = useState<'board' | 'out' | 'stock' | 'recipes'>('board')
   const [col, setCol] = useState<Status>('new')
   const [err, setErr] = useState<string | null>(null)
@@ -42,6 +71,9 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
           <button className="st-ghost" onClick={onLogout}>Esci</button>
         </div>
       </header>
+      <NewOrderPopup late queue={lateQ} orders={orders} now={now} alerts={alerts} onStart={o => { setLateQ(q => q.filter(x => x !== o.id)); void move(o, 'preparing') }} onDismiss={id => setLateQ(q => q.filter(x => x !== id))} />
+      <NewOrderPopup queue={lateQ.length ? [] : incoming} orders={orders} now={now} alerts={alerts} onStart={o => { setIncoming(q => q.filter(x => x !== o.id)); void move(o, 'preparing') }} onDismiss={id => setIncoming(q => q.filter(x => x !== id))} />
+      {lateNow.length > 0 && <div className="st-alert" role="alert"><b>In ritardo sul ritiro:</b> {lateNow.map(o => `${String(o.number).padStart(3, '0')} ${o.customer_name || o.table_label || ''} (ritiro ${o.pickup_slot}, ${o.status === 'new' ? 'non ancora iniziato' : 'in preparazione'})`).join(' · ')}</div>}
       {(error || err) && <div className="st-alert" role="alert">{err || `Connessione: ${error}`}</div>}
 
       {tab === 'out' ? <main className="st-main"><Availability /></main> : tab === 'stock' ? <main className="st-main"><StockTab /></main> : tab === 'recipes' ? <main className="st-main"><CookRecipes /></main> : (
