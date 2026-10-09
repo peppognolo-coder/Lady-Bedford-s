@@ -180,6 +180,10 @@ export function createSupabaseApi(url: string, key: string): Api {
       })
       fail(error)
     },
+    async deleteMenuItems(ids) {
+      if (!ids.length) return
+      for (let i = 0; i < ids.length; i += 100) { const { error } = await sb.from('menu_items').delete().in('id', ids.slice(i, i + 100)); fail(error) }
+    },
     async saveService(v) {
       const { error } = await sb.from('services').upsert({
         id: v.id, active: v.active, sort: v.sort,

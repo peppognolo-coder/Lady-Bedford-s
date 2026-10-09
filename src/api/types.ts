@@ -79,11 +79,14 @@ export interface Backoffice { ingredients: Ingredient[]; recipes: Recipe[]; cost
 /* ---------- contenuti dell'app cliente (foto, storia, galleria, invito) ---------- */
 export interface Chapter { id: string; num: string; kicker: L; title: L; body: L; image?: string | null }
 export interface GalleryItem { id: string; src: string; it: string; en: string; wide: boolean; h?: string }
+/** Sezione del menu: nome, frase introduttiva, in ordine di elenco. L'id resta fisso anche se il nome cambia. */
+export interface Category { id: string; it: string; en: string; introIt: string; introEn: string }
 export interface Content {
   images: Record<string, string>   // sostituzioni delle foto principali: 'hero', 'portrait', 'svc:<id servizio>'
   chapters: Chapter[] | null       // null = testi originali
   gallery: GalleryItem[] | null    // null = galleria originale
   invite: Partial<Record<'kicker' | 'line1' | 'line2' | 'address' | 'rsvp', L>>  // vuoto = testi originali
+  categories?: Category[]          // vuoto = le cinque sezioni di serie
   loyalty?: L                      // testo sulla tessera fedeltà cartacea (vuoto = testo originale)
   social?: Partial<Record<SocialId, string>>   // link ai profili: @nome, numero o indirizzo web
 }
@@ -164,6 +167,8 @@ export interface Api {
   setAvailability(itemId: string, available: boolean): Promise<void>
   // proprietà
   saveMenuItem(item: MenuItem): Promise<void>
+  /** Elimina prodotti (e le loro ricette). Lo storico degli ordini resta intatto. */
+  deleteMenuItems(ids: string[]): Promise<void>
   saveService(svc: Service): Promise<void>
   saveSettings(st: Settings): Promise<void>
   saveContent(c: Content): Promise<void>

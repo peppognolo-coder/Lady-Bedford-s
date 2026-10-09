@@ -197,6 +197,11 @@ export function createLocalApi(): Api {
       putCatalog(c => ({ ...c, menu: c.menu.map((m: MenuItem) => (m.id === itemId ? { ...m, available } : m)) }))
     },
     async saveMenuItem(item) { putCatalog(c => ({ ...c, menu: upsert(c.menu, item) })) },
+    async deleteMenuItems(ids) {
+      const gone = new Set(ids)
+      putCatalog(c => ({ ...c, menu: c.menu.filter((m: MenuItem) => !gone.has(m.id)) }))
+      putBack(b => ({ ...b, recipes: b.recipes.filter(r => !gone.has(r.item_id)) }))
+    },
     async saveService(svc) { putCatalog(c => ({ ...c, services: upsert(c.services, svc) })) },
     async setPin(role, pin) { const db = read(); write({ ...db, pins: { ...db.pins, [role]: pin } }) },
     async saveContent(c) { putCatalog(k => ({ ...k, content: c })) },
