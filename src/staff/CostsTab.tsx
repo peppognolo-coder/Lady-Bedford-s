@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { api, type Costs, type FixedCost } from '../api'
-import { useCatalog, sortMenu } from '../catalog'
+import { useCatalog, sortMenu, catsOf } from '../catalog'
 import { useBackoffice, toNum, numStr, idOf } from '../backoffice'
-import { CATS } from '../data'
 import { overheadPerPortion, pct, priceCalc, recipeCalc } from '../costs'
 import { Field, money } from './shared'
 
@@ -11,6 +10,7 @@ const roundPrice = (x: number) => Math.ceil(x * 10 - 1e-9) / 10 // al decimo di 
 export default function CostsTab({ onPriceSaved }: { onPriceSaved: () => void }) {
   const { data, reload } = useBackoffice()
   const { catalog } = useCatalog()
+  const CATS = catsOf(catalog.content)
   const [form, setForm] = useState<{ fixed: { id: string; label: string; monthly: string }[]; pm: string; margin: string; vat: string } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)

@@ -3,9 +3,8 @@ import { api, type Order } from '../api'
 import type { StockMove } from '../api/types'
 import { useBackoffice } from '../backoffice'
 import { downloadCsv } from '../backup'
-import { useCatalog } from '../catalog'
+import { useCatalog, catsOf } from '../catalog'
 import { fmtQty, pct } from '../costs'
-import { CATS } from '../data'
 import { QUAD_LABEL, dailySeries, delta, heat, inRange, periods, products, summarize, waste, weekly, type ProductRow, type Range } from '../report'
 import { Switch, money } from './shared'
 
@@ -26,6 +25,7 @@ function Delta({ cur, prev, unit = '' }: { cur: number; prev: number; unit?: str
 
 export default function ReportTab() {
   const { catalog } = useCatalog()
+  const CATS = catsOf(catalog.content)
   const { data: bo } = useBackoffice()
   const [days, setDays] = useState(30)
   const [orders, setOrders] = useState<Order[] | null>(null)

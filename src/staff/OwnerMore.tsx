@@ -65,7 +65,7 @@ export function SettingsTab({ catalog, save }: { catalog: Catalog; save: Save })
       <section className="st-sheet flat">
         <h2 className="st-h3">In home</h2>
         <div className="st-form">
-          <Field label="Consiglio del giorno (italiano)" id="o-b-it" hint="Firmato Mr. Hawkins nell’app."><textarea id="o-b-it" rows={2} value={s.butler.it} onChange={e => setS({ ...s, butler: { ...s.butler, it: e.target.value } })} maxLength={200} /></Field>
+          <Field label="Consiglio del giorno (italiano)" id="o-b-it" hint="Compare nella home dell’app."><textarea id="o-b-it" rows={2} value={s.butler.it} onChange={e => setS({ ...s, butler: { ...s.butler, it: e.target.value } })} maxLength={200} /></Field>
           <Field label="Consiglio del giorno (inglese)" id="o-b-en"><textarea id="o-b-en" rows={2} value={s.butler.en} onChange={e => setS({ ...s, butler: { ...s.butler, en: e.target.value } })} maxLength={200} /></Field>
         </div>
         <div className="st-sub" style={{ margin: '4px 0' }}>Oggi in dispensa (fino a 4 prodotti, selezionati: {s.featured.length})</div>

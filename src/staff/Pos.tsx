@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { api, type PayMethod } from '../api'
-import { useCatalog, sortMenu } from '../catalog'
-import { CATS } from '../data'
+import { useCatalog, sortMenu, catsOf } from '../catalog'
 import { money, useNow } from './shared'
 import { menuNow } from '../schedule'
 
 /** Comanda: usata dalla cassa (banco, può incassare) e dalla sala (tavolo fisso, solo invio in cucina). */
 export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier' | 'waiter'; table?: string; onSent: () => void; onCancel?: () => void }) {
   const { catalog } = useCatalog()
+  const CATS = catsOf(catalog.content)
   const [cat, setCat] = useState('tea')
   const [cart, setCart] = useState<Record<string, number>>({})
   const [who, setWho] = useState('')

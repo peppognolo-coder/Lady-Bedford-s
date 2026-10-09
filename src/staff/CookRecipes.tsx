@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { api, type MenuItem } from '../api'
-import { useCatalog, sortMenu } from '../catalog'
+import { useCatalog, sortMenu, catsOf } from '../catalog'
 import { useBackoffice, numStr } from '../backoffice'
-import { CATS } from '../data'
 import { fmtQty } from '../costs'
 import RecipeEditor from './RecipeEditor'
 
@@ -10,6 +9,7 @@ import RecipeEditor from './RecipeEditor'
 export default function CookRecipes() {
   const bo = useBackoffice()
   const { catalog, reload: reloadCatalog } = useCatalog()
+  const CATS = catsOf(catalog.content)
   const { data, reload } = bo
   const [q, setQ] = useState('')
   const [view, setView] = useState<string | null>(null)       // ricetta aperta in lettura

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { AlertsButton, useAlerts, useLowStock } from './alerts'
-import { api, type L, type MenuItem, type Service, type Settings } from '../api'
-import { useCatalog, sortMenu } from '../catalog'
-import { CATS } from '../data'
+import { api, type Category, type L, type MenuItem, type Service, type Settings } from '../api'
+import { useCatalog, sortMenu, catsOf } from '../catalog'
+import CategoriesTab from './CategoriesTab'
 import { Field, Switch, money } from './shared'
 import { SettingsTab } from './OwnerMore'
 import StockTab from './Stock'
@@ -21,7 +21,7 @@ import { AllergenChips } from './AllergenPicker'
 import { fromRecipe, sortAllergens } from '../allergens'
 import { ImagePicker } from './ImagePicker'
 
-type Tab = 'menu' | 'recipes' | 'season' | 'staff' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales'
+type Tab = 'menu' | 'cats' | 'recipes' | 'season' | 'staff' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales'
 
 export default function Owner({ onLogout }: { onLogout: () => void }) {
   const { catalog, reload } = useCatalog()
@@ -36,7 +36,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
   const save = async (f: () => Promise<void>, ok = 'Salvato') => {
     try { setErr(null); await f(); await reload(); setFlash(ok); setTimeout(() => setFlash(null), 2200); return true } catch (e) { setErr((e as Error).message); return false }
   }
-  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['staff', 'Personale e turni'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
+  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['cats', 'Categorie'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['staff', 'Personale e turni'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
   return (
     <div className="st-shell">
       <header className="st-bar">
@@ -47,7 +47,8 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
       {err && <div className="st-alert" role="alert">{err}</div>}
       {flash && <div className="st-flash" role="status">{flash}</div>}
       <main className="st-main">
-        {tab === 'menu' && <MenuTab menu={catalog.menu} settings={catalog.settings} save={save} />}
+        {tab === 'menu' && <MenuTab menu={catalog.menu} cats={catsOf(catalog.content)} settings={catalog.settings} save={save} />}
+        {tab === 'cats' && <CategoriesTab key={JSON.stringify(catalog.content.categories ?? null)} catalog={catalog} save={save} />}
         {tab === 'season' && <SeasonTab catalog={catalog} save={save} />}
         {tab === 'recipes' && <RecipesTab />}
         {tab === 'stock' && <StockTab />}
@@ -72,8 +73,10 @@ const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 const toNum = (t: string) => parseFloat(t.replace(',', '.'))
 
 /* ---------- menu ---------- */
-function MenuTab({ menu, settings, save }: { menu: MenuItem[]; settings: Settings; save: Save }) {
-  const [cat, setCat] = useState('tea')
+function MenuTab({ menu, cats, settings, save }: { menu: MenuItem[]; cats: Category[]; settings: Settings; save: Save }) {
+  const [catSel, setCat] = useState('')
+  const cat = cats.some(c => c.id === catSel) ? catSel : (cats[0]?.id ?? '')
+  const [wipe, setWipe] = useState(false)
   const [edit, setEdit] = useState<MenuItem | null>(null)
   const [isNew, setIsNew] = useState(false)
   const list = sortMenu(menu).filter(m => m.cat === cat)
@@ -87,15 +90,16 @@ function MenuTab({ menu, settings, save }: { menu: MenuItem[]; settings: Setting
   return (
     <div className="st-pane">
       <div className="st-rowline" style={{ justifyContent: 'space-between' }}>
-        <div className="st-chips" role="tablist">{CATS.map(c => <button key={c.id} role="tab" aria-selected={cat === c.id} onClick={() => { setCat(c.id); setEdit(null) }}>{c.it}</button>)}</div>
+        <div className="st-chips" role="tablist">{cats.map(c => <button key={c.id} role="tab" aria-selected={cat === c.id} onClick={() => { setCat(c.id); setEdit(null) }}>{c.it}</button>)}</div>
         <button className="st-act" style={{ minHeight: 44, fontSize: 16 }} onClick={() => { setEdit(blank()); setIsNew(true) }}>Nuovo prodotto</button>
       </div>
       <div className="st-rowline">
         <Switch on={!!settings.show_product_photos} onChange={v => void save(() => api.saveSettings({ ...settings, show_product_photos: v }), v ? 'Foto prodotti attivate' : 'Foto prodotti disattivate')} label="Mostra le foto dei prodotti nell’app dei clienti" />
       </div>
-      {edit && <MenuForm key={edit.id || 'new'} item={edit} isNew={isNew} onCancel={() => setEdit(null)} onSave={async m => { if (await save(() => api.saveMenuItem(m))) setEdit(null) }} />}
+      {edit && <MenuForm key={edit.id || 'new'} item={edit} cats={cats} isNew={isNew} onCancel={() => setEdit(null)} onSave={async m => { if (await save(() => api.saveMenuItem(m))) setEdit(null) }} onDelete={async () => { if (await save(() => api.deleteMenuItems([edit.id]), 'Prodotto eliminato')) setEdit(null) }} />}
       <ul className="st-rows">
-        {list.length === 0 && <li className="st-empty">Nessun prodotto in questa categoria.</li>}
+        {cats.length === 0 && <li className="st-empty">Crea prima una categoria dalla scheda “Categorie”.</li>}
+        {cats.length > 0 && list.length === 0 && <li className="st-empty">Nessun prodotto in questa categoria.</li>}
         {list.map((m, i) => (
           <li key={m.id} className={`st-row ${m.visible ? '' : 'hidden'}`}>
             <div className="st-row-main">
@@ -115,12 +119,22 @@ function MenuTab({ menu, settings, save }: { menu: MenuItem[]; settings: Setting
           </li>
         ))}
       </ul>
+      {menu.length > 0 && (
+        <section className="st-sheet" aria-label="Svuota il menu">
+          <h3 className="st-h3">Ricominciare da zero</h3>
+          <p className="st-hint">Elimina tutti i {menu.length} prodotti, con le loro ricette (le ricette dei piatti eliminati si perdono). Gli ordini già fatti restano nello storico e nei report. Utile per togliere il menu di esempio.</p>
+          {!wipe
+            ? <div className="st-actions"><button className="st-act alt" onClick={() => setWipe(true)}>Elimina tutto il menu…</button></div>
+            : <div className="st-actions"><button className="st-act danger" onClick={async () => { if (await save(() => api.deleteMenuItems(menu.map(m => m.id)), 'Menu svuotato')) { setWipe(false); setEdit(null) } }}>Sì, elimina {menu.length} prodotti</button><button className="st-act alt" onClick={() => setWipe(false)}>Annulla</button></div>}
+        </section>
+      )}
     </div>
   )
 }
 
-function MenuForm({ item, isNew, onSave, onCancel }: { item: MenuItem; isNew: boolean; onSave: (m: MenuItem) => void; onCancel: () => void }) {
+function MenuForm({ item, cats, isNew, onSave, onCancel, onDelete }: { item: MenuItem; cats: Category[]; isNew: boolean; onSave: (m: MenuItem) => void; onCancel: () => void; onDelete: () => void }) {
   const [m, setM] = useState(item)
+  const [askDel, setAskDel] = useState(false)
   const [price, setPrice] = useState(item.price ? String(item.price).replace('.', ',') : '')
   const [err, setErr] = useState<string | null>(null)
   const setL = (k: 'name' | 'desc', lang: keyof L, v: string) => setM(o => ({ ...o, [k]: { ...o[k], [lang]: v } }))
@@ -141,7 +155,7 @@ function MenuForm({ item, isNew, onSave, onCancel }: { item: MenuItem; isNew: bo
         <Field label="Descrizione (inglese)" id="m-den"><textarea id="m-den" rows={2} value={m.desc.en} onChange={e => setL('desc', 'en', e.target.value)} maxLength={200} /></Field>
         <Field label="Prezzo (€)" id="m-price"><input id="m-price" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="6,50" /></Field>
         <Field label="Categoria" id="m-cat">
-          <select id="m-cat" value={m.cat} onChange={e => setM({ ...m, cat: e.target.value })}>{CATS.map(c => <option key={c.id} value={c.id}>{c.it}</option>)}</select>
+          <select id="m-cat" value={m.cat} onChange={e => setM({ ...m, cat: e.target.value })}>{cats.map(c => <option key={c.id} value={c.id}>{c.it}</option>)}</select>
         </Field>
         <Field label="Foto del prodotto" id="m-photo" hint="Si vede nell’app solo se l’interruttore “Mostra le foto dei prodotti” è acceso."><ImagePicker value={m.photo} folder="products" max={800} label="Foto prodotto" ratio="1 / 1" onChange={u => setM(o => ({ ...o, photo: u }))} /></Field>
         <Field label="Allergeni" id="m-all" hint="Obbligatori per legge. Finché non li dichiari, l’app mostra “chiedi al personale”.">
@@ -161,8 +175,11 @@ function MenuForm({ item, isNew, onSave, onCancel }: { item: MenuItem; isNew: bo
         </div>
       </div>
       {err && <div className="st-alert inline" role="alert">{err}</div>}
-      <div className="st-actions"><button className="st-act" onClick={submit}>Salva</button><button className="st-act alt" onClick={onCancel}>Annulla</button></div>
-      <p className="st-hint">I prodotti non si cancellano: “Visibile nel menu” spento li toglie dall’app e dalla sala, ma restano negli ordini passati. Le modifiche arrivano subito a tutti i dispositivi.</p>
+      <div className="st-actions"><button className="st-act" onClick={submit}>Salva</button><button className="st-act alt" onClick={onCancel}>Annulla</button>
+        {!isNew && !askDel && <button className="st-act alt" onClick={() => setAskDel(true)}>Elimina…</button>}
+        {!isNew && askDel && <button className="st-act danger" onClick={onDelete}>Sì, elimina “{item.name.it}”</button>}
+      </div>
+      <p className="st-hint">Per togliere un prodotto solo per un po’ spegni “Visibile nel menu”: sparisce da app e sala ma resta, con la sua ricetta. “Elimina” lo toglie davvero (anche la ricetta); gli ordini già fatti restano nello storico. Le modifiche arrivano subito a tutti i dispositivi.</p>
     </section>
   )
 }

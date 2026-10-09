@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, type Order, type PayMethod } from '../api'
-import { useCatalog, sortMenu } from '../catalog'
-import { CATS, eur } from '../data'
+import { useCatalog, sortMenu, catsOf } from '../catalog'
+import { eur } from '../data'
 
 export const money = (n: number) => eur(n, 'it')
 export const pad = (n: number) => String(n).padStart(3, '0')
@@ -104,6 +104,7 @@ export const tableName = (n: number) => `Tavolo ${n}`
 
 export function Availability() {
   const { catalog, reload } = useCatalog()
+  const CATS = catsOf(catalog.content)
   const [busy, setBusy] = useState<string | null>(null)
   const items = sortMenu(catalog.menu.filter(m => m.visible))
   const toggle = async (id: string, available: boolean) => {

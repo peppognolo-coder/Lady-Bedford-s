@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { api, type Catalog } from '../api'
 import type { Schedule } from '../api/types'
-import { DAY_NAMES } from '../catalog'
-import { CATS } from '../data'
+import { DAY_NAMES, catsOf } from '../catalog'
 import { catKey, describeSchedule, isEmptySchedule, offerOf } from '../schedule'
 import { Field, Switch } from './shared'
 
@@ -25,9 +24,10 @@ const nowLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.g
 /** Menu stagionale: periodo dell'anno, giorni e fascia oraria per ogni prodotto o sezione. */
 export default function SeasonTab({ catalog, save }: { catalog: Catalog; save: Save }) {
   const { menu, settings } = catalog
+  const CATS = catsOf(catalog.content)
   const [edit, setEdit] = useState<string | null>(null)   // chiave: id prodotto o 'cat:<id>'
   const [draft, setDraft] = useState<Schedule>({})
-  const [cat, setCat] = useState(CATS[0].id)
+  const [cat, setCat] = useState(catsOf(catalog.content)[0].id)
   const [err, setErr] = useState<string | null>(null)
   const [when, setWhen] = useState(nowLocal)
   const sch = settings.schedules ?? {}

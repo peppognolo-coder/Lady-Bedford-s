@@ -1,9 +1,8 @@
 import { AllergenChips } from './AllergenPicker'
 import { useState } from 'react'
 import { api, type Ingredient, type MenuItem, type Recipe, type Unit } from '../api'
-import { useCatalog, sortMenu } from '../catalog'
+import { useCatalog, sortMenu, catsOf } from '../catalog'
 import { useBackoffice, toNum, numStr, idOf } from '../backoffice'
-import { CATS } from '../data'
 import { fmtQty, overheadPerPortion, pct, priceCalc, recipeCalc, unitCost } from '../costs'
 import { Field, money } from './shared'
 import RecipeEditor from './RecipeEditor'
@@ -125,6 +124,7 @@ function IngredientForm({ ing, isNew, onSave, onCancel, onDelete }: { ing: Ingre
 function Recipes({ bo }: { bo: BO }) {
   const { data, reload } = bo
   const { catalog } = useCatalog()
+  const CATS = catsOf(catalog.content)
   const [cat, setCat] = useState('tea')
   const [sel, setSel] = useState<MenuItem | null>(null)
   const recipeOf = new Map(data.recipes.map(r => [r.item_id, r]))
