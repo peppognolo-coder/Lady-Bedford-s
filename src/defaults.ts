@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   close_time: '19:00',
   slots: SLOTS,
   featured: ['darj', 'scone', 'cucu'],
-  butler: l('Oggi la signora consiglia il Darjeeling First Flush, con uno scone ancora tiepido.', 'Today her Ladyship recommends the Darjeeling First Flush, with a scone still warm.'),
+  butler: l('Oggi vi consigliamo il Darjeeling First Flush, con uno scone ancora tiepido.', 'Today we recommend the Darjeeling First Flush, with a scone still warm.'),
   tables: 12,
   show_product_photos: false,
 }

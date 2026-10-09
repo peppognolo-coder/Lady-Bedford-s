@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Catalog, type MenuItem, type Settings } from './api'
+import { api, type Catalog, type Category, type Content, type MenuItem, type Settings } from './api'
+import { CATS as DEFAULT_CATS } from './data'
 
 export { DEFAULT_CATALOG, DEFAULT_SETTINGS } from './defaults'
 import { DEFAULT_CATALOG } from './defaults'
+
+/** Sezioni del menu: quelle scelte dalla proprietà oppure le cinque di serie. */
+export const catsOf = (c: Content | undefined): Category[] => (c?.categories?.length ? c.categories : (DEFAULT_CATS as Category[]))
 
 /** Catalogo (menu, servizi, impostazioni) sempre aggiornato; parte dai dati di serie. */
 export function useCatalog() {
