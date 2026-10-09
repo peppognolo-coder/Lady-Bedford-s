@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   butler: l('Oggi vi consigliamo il Darjeeling First Flush, con uno scone ancora tiepido.', 'Today we recommend the Darjeeling First Flush, with a scone still warm.'),
   tables: 12,
   show_product_photos: false,
+  late_warn_min: 6,
 }
 
 export const DEFAULT_CATALOG: Catalog = {
