@@ -41,6 +41,7 @@ export interface Settings {
   featured: string[]       // id dei prodotti in "Oggi in dispensa"
   butler: L                // consiglio del giorno
   tables: number           // numero di tavoli in sala
+  late_warn_min?: number          // minuti prima del ritiro in cui la cucina viene avvisata se l'ordine non è iniziato (default 6)
   show_product_photos?: boolean // mostra nel menu dell'app le foto dei prodotti che ne hanno una
   schedules?: Record<string, Schedule>   // menu stagionale: id prodotto, oppure 'cat:<id sezione>'
 }
