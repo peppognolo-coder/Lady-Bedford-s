@@ -2,7 +2,7 @@ import { frond, bush } from './botanic'
 import Mural from './Mural'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { api, type OrderStatus } from './api'
-import { useCatalog, sortMenu, hoursLabel, isOpenNow, openingSentence, catsOf } from './catalog'
+import { useCatalog, sortMenu, hoursLabel, isOpenNow, openingSentence } from './catalog'
 import { ALLERGENS, allergenName } from './allergens'
 import BookingDialog, { MyBooking } from './BookingDialog'
 import { MODE_LABEL, isoDay, modeFor } from './booking'
@@ -10,7 +10,7 @@ import { SOCIALS, chaptersOf, galleryOf, galleryH, imageOf, socialUrl } from './
 import { offerOf } from './schedule'
 import { flagTitle, playTune, systemNotify, unlockOnGesture, vibrate } from './alertsound'
 import type { Content } from './api/types'
-import { TX, TABS, IMG, eur, type Lang, type Screen } from './data'
+import { TX, CATS, TABS, IMG, eur, type Lang, type Screen } from './data'
 
 /* ---------- icone (Lucide) ---------- */
 const P: Record<string, ReactNode> = {
@@ -185,8 +185,7 @@ export default function App() {
     }
   }
 
-  const cats = catsOf(catalog.content)
-  const catsOn = cats.filter(c => menu.some(m => m.cat === c.id))
+  const catsOn = CATS.filter(c => menu.some(m => m.cat === c.id))
   useEffect(() => { if (catsOn.length && !catsOn.some(c => c.id === cat)) setCat(catsOn[0].id) }, [catsOn.map(c => c.id).join(','), cat]) // eslint-disable-line react-hooks/exhaustive-deps
   const menuList = menu.filter(m => m.cat === cat && (!avoid.length || (m.allergens != null && !m.allergens.some(a => avoid.includes(a)))))
   const cartIds = Object.keys(p.cart).filter(id => byId[id] && !hold[id])
@@ -353,7 +352,7 @@ export default function App() {
               ))}
             </div>
             <div style={{ padding: '16px 20px 28px' }}>
-              {(cats.find(c => c.id === cat) ?? cats[0])?.[lang === 'it' ? 'introIt' : 'introEn'] && <p className="h-serif" style={{ margin: '0 0 6px', fontStyle: 'italic', fontSize: 16, lineHeight: 1.4, color: 'var(--color-neutral-800)' }}>{(cats.find(c => c.id === cat) ?? cats[0])![lang === 'it' ? 'introIt' : 'introEn']}</p>}
+              <p className="h-serif" style={{ margin: '0 0 6px', fontStyle: 'italic', fontSize: 16, lineHeight: 1.4, color: 'var(--color-neutral-800)' }}>{CATS.find(c => c.id === cat)![lang === 'it' ? 'introIt' : 'introEn']}</p>
               <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: 'var(--color-neutral-700)', marginBottom: 8 }}>
                 <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><span className="pill vg">VG</span>{t.vegan}</span>
                 <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><span className="pill v">V</span>{t.vegetarian}</span>
