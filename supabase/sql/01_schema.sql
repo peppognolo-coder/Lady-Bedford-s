@@ -22,7 +22,7 @@ alter table public.menu_items add column if not exists photo text;
 alter table public.menu_items add column if not exists allergens text[];   -- null = non ancora dichiarati; '{}' = nessuno
 
 alter table public.menu_items drop constraint if exists menu_items_cat_check;
-alter table public.menu_items add constraint menu_items_cat_check check (cat in ('tea','pastry','savoury','mocktail','hamper'));
+-- le categorie sono libere (le gestisce la proprietà dall'app): nessun elenco fisso
 
 create table if not exists public.services (
   id        text primary key,
@@ -254,7 +254,7 @@ language plpgsql security definer set search_path = public as $$
 declare v_id text;
 begin
   if not public.is_back() then raise exception 'non autorizzato'; end if;
-  if p_cat not in ('tea','pastry','savoury','mocktail','hamper') then raise exception 'categoria non valida'; end if;
+  if coalesce(trim(p_cat), '') = '' or length(p_cat) > 40 then raise exception 'categoria non valida'; end if;
   if coalesce(trim(p_name), '') = '' then raise exception 'nome mancante'; end if;
   v_id := coalesce(nullif(left(regexp_replace(lower(p_name), '[^a-z0-9]+', '-', 'g'), 24), ''), 'prodotto') || '-' || substr(md5(random()::text), 1, 3);
   insert into public.menu_items (id, cat, name_it, name_en, price, visible, sort)
@@ -398,7 +398,7 @@ insert into public.menu_items (id, cat, name_it, name_en, desc_it, desc_en, pric
   ('earl', 'tea', 'Earl Grey alla crema', 'Cream Earl Grey', 'Con latte d’avena montato e fiordaliso.', 'With steamed oat milk and cornflower.', 6, true, 1),
   ('darj', 'tea', 'Darjeeling First Flush', 'Darjeeling First Flush', 'Raccolto di primavera, note di moscato.', 'Spring harvest, muscatel notes.', 7, true, 2),
   ('rooi', 'tea', 'Rooibos alla vaniglia', 'Vanilla Rooibos', 'Senza teina, per la sera.', 'Caffeine-free, for the evening.', 5.5, true, 3),
-  ('scone', 'pastry', 'Scone della cuoca', 'Cook’s scone', 'Con crema di anacardi e confettura di fragole.', 'With cashew cream and strawberry jam.', 4.5, true, 4),
+  ('scone', 'pastry', 'Scone', 'Scone', 'Con crema di anacardi e confettura di fragole.', 'With cashew cream and strawberry jam.', 4.5, true, 4),
   ('sponge', 'pastry', 'Victoria sponge', 'Victoria sponge', 'Pan di Spagna, lamponi e crema al burro.', 'Sponge, raspberries and buttercream.', 5.5, false, 5),
   ('lemon', 'pastry', 'Lemon drizzle', 'Lemon drizzle', 'Torta al limone con glassa croccante.', 'Lemon loaf with a crackling glaze.', 5, true, 6),
   ('short', 'pastry', 'Shortbread', 'Shortbread', 'Biscotti di frolla al burro, tre pezzi.', 'Butter shortbread, three pieces.', 3.5, false, 7),
@@ -409,13 +409,13 @@ insert into public.menu_items (id, cat, name_it, name_en, desc_it, desc_en, pric
   ('hibiscus', 'mocktail', 'Hibiscus Sour', 'Hibiscus Sour', 'Infuso freddo di ibisco, limone e sciroppo di agave.', 'Cold hibiscus infusion, lemon and agave syrup.', 7.5, true, 14),
   ('rosa', 'mocktail', 'Rosa e Lampone', 'Rose & Raspberry', 'Lamponi pestati, acqua di rose e soda.', 'Muddled raspberries, rosewater and soda.', 7.5, true, 15),
   ('earlfizz', 'mocktail', 'Earl Grey Fizz', 'Earl Grey Fizz', 'Earl Grey freddo, limone, zucchero di canna e bollicine.', 'Iced Earl Grey, lemon, cane sugar and bubbles.', 7, true, 16),
-  ('picnic', 'hamper', 'Cestino per due', 'Hamper for two', 'Tè sfuso, 2 scone, tramezzini, 2 dolci a scelta della cuoca.', 'Loose tea, 2 scones, sandwiches, 2 cakes chosen by Cook.', 32, true, 11),
+  ('picnic', 'hamper', 'Cestino per due', 'Hamper for two', 'Tè sfuso, 2 scone, tramezzini, 2 dolci a scelta.', 'Loose tea, 2 scones, sandwiches, 2 cakes of your choice.', 32, true, 11),
   ('gift', 'hamper', 'Latta regalo', 'Gift tin', 'Miscela Lady Bedford’s 100 g e shortbread vegano.', 'Lady Bedford Blend 100 g and vegan shortbread.', 24, true, 12)
 on conflict (id) do nothing;
 
 insert into public.services (id, sort, kicker_it, kicker_en, title_it, title_en, body_it, body_en, price_it, price_en, cta_it, cta_en) values
-  ('tea', 0, 'Ogni pomeriggio', 'Every afternoon', 'Afternoon tea in salotto', 'Afternoon tea in the drawing room', 'Alzatina a tre piani con tramezzini, scone e dolci della cuoca, e tè a volontà dalla dispensa di Lord Edward.', 'A three-tier stand of sandwiches, scones and Cook’s cakes, with endless tea from Lord Edward’s pantry.', '€ 28 a persona', '€ 28 per person', 'Riserva', 'Reserve'),
-  ('party', 1, 'Su richiesta', 'On request', 'Ricevimenti privati', 'Private receptions', 'Compleanni, fidanzamenti, baby shower: la casa intera, fino a 24 ospiti, con servizio del maggiordomo.', 'Birthdays, engagements, baby showers: the whole house, up to 24 guests, with the butler in attendance.', 'Da € 45 a persona', 'From € 45 per person', 'Richiedi', 'Enquire'),
+  ('tea', 0, 'Ogni pomeriggio', 'Every afternoon', 'Afternoon tea in salotto', 'Afternoon tea in the drawing room', 'Alzatina a tre piani con tramezzini, scone e dolci, e tè a volontà.', 'A three-tier stand of sandwiches, scones and cakes, with endless tea.', '€ 28 a persona', '€ 28 per person', 'Riserva', 'Reserve'),
+  ('party', 1, 'Su richiesta', 'On request', 'Ricevimenti privati', 'Private receptions', 'Compleanni, fidanzamenti, baby shower: la casa intera, fino a 24 ospiti.', 'Birthdays, engagements, baby showers: the whole house, up to 24 guests.', 'Da € 45 a persona', 'From € 45 per person', 'Richiedi', 'Enquire'),
   ('class', 2, 'Il sabato mattina', 'Saturday mornings', 'Lezioni di tè', 'Tea lessons', 'Un’ora con la padrona di casa tra foglie, temperature e porcellane. Degustazione di cinque tè inclusa.', 'An hour with the lady of the house among leaves, temperatures and porcelain. Tasting of five teas included.', '€ 35 a persona', '€ 35 per person', 'Riserva', 'Reserve'),
   ('gift', 3, 'Da regalare', 'To give', 'Buono ospite', 'Guest voucher', 'Un invito su carta di cotone, sigillato a ceralacca, per un afternoon tea a casa Bedford.', 'An invitation on cotton paper, sealed with wax, for an afternoon tea at the Bedford house.', 'Da € 30', 'From € 30', 'Richiedi', 'Enquire')
 on conflict (id) do nothing;
