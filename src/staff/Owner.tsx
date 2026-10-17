@@ -10,6 +10,7 @@ import RecipesTab from './Recipes'
 import CostsTab from './CostsTab'
 import ContentTab from './ContentTab'
 import SeasonTab from './SeasonTab'
+import HaccpOwner from './HaccpOwner'
 import StaffTab from './StaffTab'
 import ReportTab from './ReportTab'
 import PinsTab from './PinsTab'
@@ -21,7 +22,7 @@ import { AllergenChips } from './AllergenPicker'
 import { fromRecipe, sortAllergens } from '../allergens'
 import { ImagePicker } from './ImagePicker'
 
-type Tab = 'menu' | 'cats' | 'recipes' | 'season' | 'staff' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales'
+type Tab = 'menu' | 'cats' | 'recipes' | 'season' | 'staff' | 'stock' | 'costs' | 'services' | 'content' | 'pins' | 'backup' | 'bookings' | 'bookingrules' | 'closures' | 'settings' | 'sales' | 'haccp'
 
 export default function Owner({ onLogout }: { onLogout: () => void }) {
   const { catalog, reload } = useCatalog()
@@ -36,7 +37,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
   const save = async (f: () => Promise<void>, ok = 'Salvato') => {
     try { setErr(null); await f(); await reload(); setFlash(ok); setTimeout(() => setFlash(null), 2200); return true } catch (e) { setErr((e as Error).message); return false }
   }
-  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['cats', 'Categorie'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['staff', 'Personale e turni'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
+  const tabs: [Tab, string][] = [['menu', 'Menu e prezzi'], ['cats', 'Categorie'], ['season', 'Menu stagionale'], ['recipes', 'Ricettario'], ['stock', 'Scorte e spesa'], ['costs', 'Costi e prezzi'], ['services', 'Servizi'], ['content', 'Contenuti app'], ['pins', 'PIN di accesso'], ['bookings', 'Prenotazioni'], ['bookingrules', 'Regole prenotazione'], ['staff', 'Personale e turni'], ['haccp', 'HACCP'], ['closures', 'Chiusure cassa'], ['backup', 'Dati e backup'], ['settings', 'Orari e impostazioni'], ['sales', 'Report e statistiche']]
   return (
     <div className="st-shell">
       <header className="st-bar">
@@ -58,6 +59,7 @@ export default function Owner({ onLogout }: { onLogout: () => void }) {
         {tab === 'bookings' && <BookingsTab bookings={bookings} />}
         {tab === 'bookingrules' && <BookingConfigTab catalog={catalog} save={save} />}
         {tab === 'staff' && <StaffTab />}
+        {tab === 'haccp' && <HaccpOwner />}
         {tab === 'closures' && <ClosuresTab />}
         {tab === 'backup' && <BackupTab />}
         {tab === 'pins' && <PinsTab />}

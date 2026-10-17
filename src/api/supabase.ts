@@ -4,7 +4,7 @@ import { DEFAULT_COSTS } from '../costs'
 import { EMPTY_CONTENT } from '../content'
 import { DEFAULT_BOOKING } from '../booking'
 import { withConfigDefaults } from '../shifts'
-import type { Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
+import type { HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
 import { startOfToday } from './types'
 
 const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
@@ -238,6 +238,23 @@ export function createSupabaseApi(url: string, key: string): Api {
     async saveCosts(c) { const { error } = await sb.from('owner_settings').upsert({ key: 'costs', value: c }); fail(error) },
     async moveStock(id, delta, reason, note) { const { error } = await sb.rpc('move_stock', { p_id: id, p_delta: delta, p_reason: reason, p_note: note ?? null }); fail(error) },
     async setStock(id, qty, note) { const { error } = await sb.rpc('set_stock', { p_id: id, p_qty: qty, p_note: note ?? null }); fail(error) },
+    async haccpOperators() { const { data, error } = await sb.rpc('haccp_operators'); fail(error); return (data ?? []) as { id: string; name: string }[] },
+    async listHaccpEquipment() { const { data, error } = await sb.from('haccp_equipment').select('*').order('sort').order('name'); fail(error); return (data ?? []).map((r: any) => ({ ...r, temp_min: num(r.temp_min), temp_max: num(r.temp_max), slots: r.slots ?? [] })) as HaccpEquipment[] },
+    async saveHaccpEquipment(e) { const { error } = await sb.from('haccp_equipment').upsert({ id: e.id, name: e.name.trim(), kind: e.kind, temp_min: e.temp_min, temp_max: e.temp_max, slots: e.slots, active: e.active, sort: e.sort }); fail(error) },
+    async listHaccpReadings(from, to) { const { data, error } = await sb.from('haccp_temp_readings').select('*').gte('day', from).lte('day', to).order('at', { ascending: false }).limit(1000); fail(error); return (data ?? []).map((r: any) => ({ ...r, value: num(r.value), limit_min: num(r.limit_min), limit_max: num(r.limit_max) })) as HaccpReading[] },
+    async logTemperature(equipmentId, value, action, operator, corrects) {
+      const { data, error } = await sb.rpc('haccp_log_temperature', { p_equipment: equipmentId, p_value: value, p_action: action, p_operator: operator, p_corrects: corrects ?? null }); fail(error)
+      return data as { id: string; in_range: boolean }
+    },
+    async listHaccpTasks() { const { data, error } = await sb.from('haccp_cleaning_tasks').select('*').order('sort').order('name'); fail(error); return (data ?? []) as HaccpTask[] },
+    async saveHaccpTask(t) { const { error } = await sb.from('haccp_cleaning_tasks').upsert({ id: t.id, area: t.area.trim(), name: t.name.trim(), frequency: t.frequency, sort: t.sort, active: t.active }); fail(error) },
+    async listHaccpCleaning(from, to) { const { data, error } = await sb.from('haccp_cleaning_logs').select('*').gte('day', from).lte('day', to).order('at', { ascending: false }).limit(2000); fail(error); return (data ?? []) as HaccpCleanLog[] },
+    async tickCleaning(taskId, operator, note) { const { error } = await sb.rpc('haccp_tick_cleaning', { p_task: taskId, p_operator: operator, p_note: note ?? null }); fail(error) },
+    async listHaccpNcs() { const { data, error } = await sb.from('haccp_nonconformities').select('*').order('opened_at', { ascending: false }).limit(300); fail(error); return (data ?? []) as HaccpNc[] },
+    async closeHaccpNc(id, cause, resolution) { const { error } = await sb.rpc('haccp_close_nc', { p_id: id, p_cause: cause, p_resolution: resolution }); fail(error) },
+    async listCertificates() { const { data, error } = await sb.from('staff_certificates').select('*').order('expires_on'); fail(error); return (data ?? []) as StaffCert[] },
+    async saveCertificate(c) { const { error } = await sb.from('staff_certificates').upsert({ id: c.id, member_id: c.member_id, kind: c.kind.trim(), issued_on: c.issued_on || null, expires_on: c.expires_on, note: c.note?.trim() || null }); fail(error) },
+    async deleteCertificate(id) { const { error } = await sb.from('staff_certificates').delete().eq('id', id); fail(error) },
     subscribe(cb) {
       // un canale per ogni ascoltatore: con lo stesso nome Supabase rifiuta il secondo (e la pagina diventa bianca)
       const ch = sb.channel(`lb-live-${++chanSeq}`)
@@ -247,6 +264,11 @@ export function createSupabaseApi(url: string, key: string): Api {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredients' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_equipment' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_temp_readings' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_cleaning_tasks' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_cleaning_logs' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_nonconformities' }, cb)
         .subscribe()
       return () => { void sb.removeChannel(ch) }
     },

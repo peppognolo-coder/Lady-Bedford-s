@@ -6,12 +6,13 @@ import { toDataUrl } from '../image'
 import { availability, checkBooking, DEFAULT_BOOKING } from '../booking'
 import { demoStaff } from '../demoStaff'
 import { withConfigDefaults } from '../shifts'
-import type { Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
+import type { HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
 
 // Modalità demo: tutto nel browser (localStorage), condiviso tra le schede dello stesso browser.
 const KEY = 'lb:demo:v2'
 const PINS: Record<Role, string> = { kitchen: '111111', cashier: '222222', waiter: '333333', owner: '44444444' }
-type DB = { staff?: { members: StaffMember[]; shifts: Shift[]; config?: StaffConfig }; bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
+type Haccp = { equipment: HaccpEquipment[]; readings: HaccpReading[]; ncs: HaccpNc[]; tasks: HaccpTask[]; cleaning: HaccpCleanLog[]; certs: StaffCert[] }
+type DB = { haccp?: Haccp; staff?: { members: StaffMember[]; shifts: Shift[]; config?: StaffConfig }; bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
 
 let mem: DB = { orders: [], seq: {}, catalog: DEFAULT_CATALOG, back: EMPTY_BACKOFFICE }
 const read = (): DB => {
@@ -69,6 +70,20 @@ const demoOrders = (cat: Catalog): { orders: Order[]; seq: Record<string, number
   return { orders, seq }
 }
 const slugId = (s: string) => (s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'voce') + '-' + Math.random().toString(36).slice(2, 5)
+const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const demoHaccp = (): Haccp => ({
+  equipment: [
+    { id: 'eq1', name: 'Frigo dolci', kind: 'frigo', temp_min: 0, temp_max: 4, slots: ['09:00', '17:00'], active: true, sort: 1 },
+    { id: 'eq2', name: 'Frigo cucina', kind: 'frigo', temp_min: 0, temp_max: 4, slots: ['09:00', '17:00'], active: true, sort: 2 },
+    { id: 'eq3', name: 'Congelatore', kind: 'congelatore', temp_min: -24, temp_max: -18, slots: ['09:00'], active: true, sort: 3 },
+  ],
+  readings: [], ncs: [], cleaning: [], certs: [],
+  tasks: [
+    { id: 'ct1', area: 'Cucina', name: 'Sanificare piani di lavoro', frequency: 'giornaliera', sort: 1, active: true },
+    { id: 'ct2', area: 'Sala', name: 'Pulire e sanificare i tavoli', frequency: 'giornaliera', sort: 2, active: true },
+    { id: 'ct3', area: 'Cucina', name: 'Pulizia profonda frigoriferi', frequency: 'settimanale', sort: 3, active: true },
+  ],
+})
 const dayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
 
@@ -110,6 +125,8 @@ export function createLocalApi(): Api {
   const staffDb = (): NonNullable<DB['staff']> => { const db = read(); return db.staff ?? (window.__LB_DEMO?.seed ? demoStaff() : { members: [], shifts: [] }) }
   const putBack = (f: (b: Backoffice) => Backoffice) => { const db = read(); write({ ...db, back: f(db.back!) }) }
   const upsertBy = <T,>(list: T[], item: T, key: (x: T) => string) => (list.some(x => key(x) === key(item)) ? list.map(x => (key(x) === key(item) ? item : x)) : [...list, item])
+  const hc = (): Haccp => read().haccp ?? demoHaccp()
+  const putHc = (f: (h: Haccp) => Haccp) => { const db = read(); write({ ...db, haccp: f(db.haccp ?? demoHaccp()) }) }
   const moveStock = (id: string, delta: number, reason: MoveReason, note?: string) => putBack(b => ({
     ...b,
     ingredients: b.ingredients.map(i => (i.id === id ? { ...i, stock: i.stock + delta } : i)),
@@ -229,6 +246,38 @@ export function createLocalApi(): Api {
       const cur = read().back!.ingredients.find(x => x.id === ingredientId); if (!cur) return
       moveStock(ingredientId, qty - cur.stock, 'inventario', note)
     },
+    async haccpOperators() { return staffDb().members.filter(m => m.active && m.role === 'cucina').map(m => ({ id: m.id, name: m.name })) },
+    async listHaccpEquipment() { return [...hc().equipment].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)) },
+    async saveHaccpEquipment(e) { putHc(h => ({ ...h, equipment: upsert(h.equipment, e) })) },
+    async listHaccpReadings(from, to) { return hc().readings.filter(r => r.day >= from && r.day <= to).sort((a, b) => b.at.localeCompare(a.at)) },
+    async logTemperature(equipmentId, value, action, operator, corrects) {
+      const e = hc().equipment.find(x => x.id === equipmentId)
+      if (!e || !e.active) throw new Error('Apparecchio non valido')
+      if (!operator.trim()) throw new Error('Scegli chi sei')
+      const ok = value >= e.temp_min && value <= e.temp_max
+      if (!ok && !action?.trim()) throw new Error('Temperatura fuori soglia: scrivi l’azione correttiva')
+      const r: HaccpReading = { id: uid(), day: isoToday(), at: new Date().toISOString(), equipment_id: e.id, equipment_name: e.name, value, limit_min: e.temp_min, limit_max: e.temp_max, in_range: ok, corrective_action: action?.trim() || null, operator: operator.trim(), by_role: getRole(), corrects_id: corrects ?? null }
+      putHc(h => ({ ...h, readings: [...h.readings, r], ncs: ok ? h.ncs : [...h.ncs, { id: uid(), opened_at: r.at, source: 'temperature', source_id: r.id, description: `${e.name}: ${value} °C (limite ${e.temp_min} / ${e.temp_max} °C)`, status: 'aperta', cause: null, resolution: null, closed_at: null }] }))
+      return { id: r.id, in_range: ok }
+    },
+    async listHaccpTasks() { return [...hc().tasks].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)) },
+    async saveHaccpTask(t) { putHc(h => ({ ...h, tasks: upsert(h.tasks, t) })) },
+    async listHaccpCleaning(from, to) { return hc().cleaning.filter(c => c.day >= from && c.day <= to).sort((a, b) => b.at.localeCompare(a.at)) },
+    async tickCleaning(taskId, operator, note) {
+      const t = hc().tasks.find(x => x.id === taskId), day = isoToday()
+      if (!t || !t.active) throw new Error('Compito non valido')
+      if (!operator.trim()) throw new Error('Scegli chi sei')
+      if (hc().cleaning.some(c => c.task_id === taskId && c.day === day)) return
+      putHc(h => ({ ...h, cleaning: [...h.cleaning, { id: uid(), task_id: t.id, task_name: t.name, area: t.area, day, at: new Date().toISOString(), operator: operator.trim(), note: note?.trim() || null }] }))
+    },
+    async listHaccpNcs() { return [...hc().ncs].sort((a, b) => b.opened_at.localeCompare(a.opened_at)) },
+    async closeHaccpNc(id, cause, resolution) {
+      if (!cause.trim() || !resolution.trim()) throw new Error('Scrivi causa e soluzione')
+      putHc(h => ({ ...h, ncs: h.ncs.map(n => (n.id === id && n.status === 'aperta' ? { ...n, status: 'chiusa' as const, cause: cause.trim(), resolution: resolution.trim(), closed_at: new Date().toISOString() } : n)) }))
+    },
+    async listCertificates() { return [...hc().certs].sort((a, b) => a.expires_on.localeCompare(b.expires_on)) },
+    async saveCertificate(c) { putHc(h => ({ ...h, certs: upsert(h.certs, c) })) },
+    async deleteCertificate(id) { putHc(h => ({ ...h, certs: h.certs.filter(c => c.id !== id) })) },
     subscribe(cb) { listeners.add(cb); return () => { listeners.delete(cb) } },
   }
 }

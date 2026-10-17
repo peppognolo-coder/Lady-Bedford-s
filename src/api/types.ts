@@ -133,6 +133,16 @@ export interface NewBooking { kind: string; day: string; time?: string | null; p
 export interface BookingPublic { id: string; ref: string; status: BookingStatus; kind: string; day: string; time: string | null; party: number; name: string; table_label?: string | null }
 
 /** Chiusura di cassa di una giornata. */
+// ---------- HACCP ----------
+export type EquipKind = 'frigo' | 'congelatore' | 'abbattitore' | 'altro'
+export interface HaccpEquipment { id: string; name: string; kind: EquipKind; temp_min: number; temp_max: number; slots: string[]; active: boolean; sort: number }
+export interface HaccpReading { id: string; day: string; at: string; equipment_id: string; equipment_name: string; value: number; limit_min: number; limit_max: number; in_range: boolean; corrective_action: string | null; operator: string; by_role: string | null; corrects_id: string | null }
+export interface HaccpNc { id: string; opened_at: string; source: string; source_id: string | null; description: string; status: 'aperta' | 'chiusa'; cause: string | null; resolution: string | null; closed_at: string | null }
+export type CleanFreq = 'giornaliera' | 'settimanale' | 'mensile'
+export interface HaccpTask { id: string; area: string; name: string; frequency: CleanFreq; sort: number; active: boolean }
+export interface HaccpCleanLog { id: string; task_id: string; task_name: string; area: string; day: string; at: string; operator: string; note: string | null }
+export interface StaffCert { id: string; member_id: string; kind: string; issued_on: string | null; expires_on: string; note: string | null }
+
 export interface Closure {
   day: string                // 'AAAA-MM-GG'
   float_start: number        // fondo cassa a inizio giornata
@@ -211,6 +221,21 @@ export interface Api {
   setPin(role: Role, pin: string): Promise<void>
   moveStock(ingredientId: string, delta: number, reason: MoveReason, note?: string): Promise<void>
   setStock(ingredientId: string, qty: number, note?: string): Promise<void> // conteggio inventario
+  // HACCP (cucina e proprietà; attestati solo proprietà)
+  haccpOperators(): Promise<{ id: string; name: string }[]>
+  listHaccpEquipment(): Promise<HaccpEquipment[]>
+  saveHaccpEquipment(e: HaccpEquipment): Promise<void>
+  listHaccpReadings(from: string, to: string): Promise<HaccpReading[]>
+  logTemperature(equipmentId: string, value: number, action: string | null, operator: string, corrects?: string | null): Promise<{ id: string; in_range: boolean }>
+  listHaccpTasks(): Promise<HaccpTask[]>
+  saveHaccpTask(t: HaccpTask): Promise<void>
+  listHaccpCleaning(from: string, to: string): Promise<HaccpCleanLog[]>
+  tickCleaning(taskId: string, operator: string, note?: string | null): Promise<void>
+  listHaccpNcs(): Promise<HaccpNc[]>
+  closeHaccpNc(id: string, cause: string, resolution: string): Promise<void>
+  listCertificates(): Promise<StaffCert[]>
+  saveCertificate(c: StaffCert): Promise<void>
+  deleteCertificate(id: string): Promise<void>
   subscribe(cb: () => void): () => void
 }
 

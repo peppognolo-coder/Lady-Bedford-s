@@ -1,3 +1,4 @@
+import HaccpKitchen from './HaccpKitchen'
 import { useEffect, useRef, useState } from 'react'
 import { api, type Order, type Status } from '../api'
 import StockTab from './Stock'
@@ -48,7 +49,7 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, warn])
   const lateNow = orders.filter(o => { const m = o.pickup_slot ? minsToSlot(o, now) : null; return m !== null && ((o.status === 'new' && m <= warn) || (o.status === 'preparing' && m <= 0)) })
-  const [tab, setTab] = useState<'board' | 'out' | 'stock' | 'recipes'>('board')
+  const [tab, setTab] = useState<'board' | 'out' | 'stock' | 'recipes' | 'haccp'>('board')
   const [col, setCol] = useState<Status>('new')
   const [err, setErr] = useState<string | null>(null)
   useWakeLock()
@@ -67,6 +68,7 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
           <button aria-pressed={tab === 'out'} onClick={() => setTab('out')}>Esaurito</button>
           <button aria-pressed={tab === 'stock'} onClick={() => setTab('stock')}>Scorte{lowStock.length > 0 && <i className="st-dot" aria-label={`${lowStock.length} sotto scorta`}>{lowStock.length}</i>}</button>
           <button aria-pressed={tab === 'recipes'} onClick={() => setTab('recipes')}>Ricettario</button>
+          <button aria-pressed={tab === 'haccp'} onClick={() => setTab('haccp')}>HACCP</button>
         </nav>
         <div className="st-tools">
           <AlertsButton alerts={alerts} />
@@ -78,7 +80,7 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
       {lateNow.length > 0 && <div className="st-alert" role="alert"><b>In ritardo sul ritiro:</b> {lateNow.map(o => `${String(o.number).padStart(3, '0')} ${o.customer_name || o.table_label || ''} (ritiro ${o.pickup_slot}, ${o.status === 'new' ? 'non ancora iniziato' : 'in preparazione'})`).join(' · ')}</div>}
       {(error || err) && <div className="st-alert" role="alert">{err || `Connessione: ${error}`}</div>}
 
-      {tab === 'out' ? <main className="st-main"><Availability /></main> : tab === 'stock' ? <main className="st-main"><StockTab /></main> : tab === 'recipes' ? <main className="st-main"><CookRecipes /></main> : (
+      {tab === 'out' ? <main className="st-main"><Availability /></main> : tab === 'stock' ? <main className="st-main"><StockTab /></main> : tab === 'recipes' ? <main className="st-main"><CookRecipes /></main> : tab === 'haccp' ? <main className="st-main"><HaccpKitchen /></main> : (
         <>
           <div className="st-coltabs" role="tablist">
             {COLS.map(c => <button key={c.id} role="tab" aria-selected={col === c.id} onClick={() => setCol(c.id)}>{c.title} <b className="tnum">{byStatus(c.id).length}</b></button>)}
