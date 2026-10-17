@@ -3,7 +3,7 @@ import { useCatalog } from '../catalog'
 import { type Order } from '../api'
 import Pos from './Pos'
 import BookingsTab, { useBookings } from './BookingsTab'
-import { Availability, OrderHeader, money, serveOrder, tableName, useNow, useOrders } from './shared'
+import { Availability, OrderHeader, OrderNote, money, serveOrder, tableName, useNow, useOrders } from './shared'
 import { AlertsButton, useAlerts, useReadyReminder } from './alerts'
 
 const STATUS_LABEL = { new: 'In coda', preparing: 'In preparazione', ready: 'Pronto da servire', served: 'Servito', completed: 'Chiuso', cancelled: 'Annullato' } as const
@@ -86,7 +86,7 @@ export default function Waiter({ onLogout }: { onLogout: () => void }) {
                 <ul className="st-lines compact">
                   {o.items.map((i, k) => <li key={k}><b className="st-qty tnum">{i.qty}×</b><span>{i.name}</span></li>)}
                 </ul>
-                {o.note && <div className="st-note"><b>Nota</b> {o.note}</div>}
+                {o.note && <OrderNote note={o.note} />}
                 <div className="st-rowline"><span className={`st-pill ${o.status}`}>{STATUS_LABEL[o.status]}</span>
                   {o.payment_status === 'paid' && <span className="st-pill paid">Pagato</span>}</div>
                 {o.status === 'ready' && <button className="st-act" onClick={() => serve(o)}>Servito</button>}

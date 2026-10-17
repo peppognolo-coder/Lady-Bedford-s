@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, type Order, type PayMethod } from '../api'
 import { useCatalog, sortMenu, catsOf } from '../catalog'
 import { eur } from '../data'
+import { isAllergyNote } from '../allergens'
 
 export const money = (n: number) => eur(n, 'it')
 export const pad = (n: number) => String(n).padStart(3, '0')
@@ -91,6 +92,12 @@ export function OrderHeader({ o, now }: { o: Order; now: number }) {
       </div>
     </div>
   )
+}
+
+/** Nota dell'ordine: se è un'allergia del cliente, resta ben visibile in rosso. */
+export function OrderNote({ note }: { note: string }) {
+  const allergy = isAllergyNote(note)
+  return <div className={`st-note${allergy ? ' allergy' : ''}`}><b>{allergy ? '⚠ Allergia' : 'Nota'}</b> {allergy ? note.replace(/^\s*allergia\s*:?\s*/i, '') : note}</div>
 }
 
 /** Servire un ordine pronto: se già pagato si chiude, altrimenti resta "servito" in attesa del conto. */

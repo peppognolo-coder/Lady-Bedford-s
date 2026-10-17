@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type Order, type Status } from '../api'
 import StockTab from './Stock'
 import CookRecipes from './CookRecipes'
-import { Availability, OrderHeader, minsToSlot, useNow, useOrders, useWakeLock } from './shared'
+import { Availability, OrderHeader, OrderNote, minsToSlot, useNow, useOrders, useWakeLock } from './shared'
 import { useCatalog } from '../catalog'
+import { allergenLabel, isAllergyNote } from '../allergens'
 import { AlertsButton, useAlerts, useLowStock } from './alerts'
 import NewOrderPopup from './NewOrderPopup'
 
@@ -25,6 +26,7 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
   const now = useNow(15000)
   const { catalog } = useCatalog()
   const warn = catalog.settings.late_warn_min ?? 6
+  const declared = new Map(catalog.menu.map(m => [m.id, m.allergens ?? null]))   // allergeni dichiarati per prodotto
   const [lateQ, setLateQ] = useState<string[]>([])
   const warned = useRef(new Set<string>()), due = useRef(new Set<string>())
   // ordini da asporto in ritardo: avviso con finestra se non sono ancora iniziati vicino al ritiro, suono se sono in preparazione all'ora del ritiro
@@ -91,11 +93,14 @@ export default function Kitchen({ onLogout }: { onLogout: () => void }) {
                     <article key={o.id} className={`st-card s-${o.status}`}>
                       <OrderHeader o={o} now={now} />
                       <ul className="st-lines">
-                        {o.items.map((i, k) => (
-                          <li key={k}><b className="st-qty tnum">{i.qty}×</b><span>{i.name}</span><em>{CAT_LABEL[i.cat] || ''}</em></li>
-                        ))}
+                        {o.items.map((i, k) => {
+                          const decl = isAllergyNote(o.note) ? declared.get(i.item_id) : undefined   // solo sugli ordini con allergia
+                          return (
+                            <li key={k}><b className="st-qty tnum">{i.qty}×</b><span>{i.name}{decl !== undefined && <small className={`st-all${decl === null ? ' unk' : ''}`}>{allergenLabel(decl)}</small>}</span><em>{CAT_LABEL[i.cat] || ''}</em></li>
+                          )
+                        })}
                       </ul>
-                      {o.note && <div className="st-note"><b>Nota</b> {o.note}</div>}
+                      {o.note && <OrderNote note={o.note} />}
                       {c.action && <button className="st-act" onClick={() => move(o, c.action!.next)}>{c.action.label}</button>}
                       {c.id === 'preparing' && <button className="st-back" onClick={() => move(o, 'new')}>Rimetti in coda</button>}
                       {c.id === 'ready' && <button className="st-back" onClick={() => move(o, 'preparing')}>Riporta in preparazione</button>}

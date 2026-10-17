@@ -3,6 +3,8 @@ import { api, type PayMethod } from '../api'
 import { useCatalog, sortMenu, catsOf } from '../catalog'
 import { money, useNow } from './shared'
 import { menuNow } from '../schedule'
+import { AllergenChips } from './AllergenPicker'
+import { allergenConflict, allergenHits, allergenShort, allergyNote } from '../allergens'
 
 /** Comanda: usata dalla cassa (banco, può incassare) e dalla sala (tavolo fisso, solo invio in cucina). */
 export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier' | 'waiter'; table?: string; onSent: () => void; onCancel?: () => void }) {
@@ -13,6 +15,7 @@ export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier'
   const [who, setWho] = useState('')
   const [tableText, setTableText] = useState('')
   const [note, setNote] = useState('')
+  const [avoid, setAvoid] = useState<string[]>([])   // allergeni che il cliente deve evitare
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   useNow(60000)
@@ -22,13 +25,15 @@ export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier'
   const total = lines.reduce((a, l) => a + l.m.price * l.q, 0)
   const add = (id: string, d: number) => setCart(c => { const q = Math.max(0, (c[id] || 0) + d); const n = { ...c, [id]: q }; if (!q) delete n[id]; return n })
   const tableLabel = table ?? tableText
+  // prodotti in comanda che contengono (o potrebbero contenere) ciò che il cliente evita: solo un avviso, decide chi serve
+  const risky = lines.map(l => ({ l, c: allergenConflict(l.m.allergens, avoid) })).filter(x => x.c !== 'no')
 
   const send = async (pay: PayMethod | null) => {
     if (!lines.length) return
     setBusy(true); setErr(null)
     try {
-      await api.createCounterOrder({ customer_name: who, table_label: tableLabel, note, pay, source: mode === 'waiter' ? 'floor' : 'counter', items: lines.map(l => ({ item_id: l.id, qty: l.q })) })
-      setCart({}); setWho(''); setTableText(''); setNote(''); onSent()
+      await api.createCounterOrder({ customer_name: who, table_label: tableLabel, note: allergyNote(avoid, note), pay, source: mode === 'waiter' ? 'floor' : 'counter', items: lines.map(l => ({ item_id: l.id, qty: l.q })) })
+      setCart({}); setWho(''); setTableText(''); setNote(''); setAvoid([]); onSent()
     } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
 
@@ -40,8 +45,9 @@ export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier'
         </div>
         <div className="st-tiles">
           {menu.filter(m => m.cat === cat).map(m => (
-            <button key={m.id} className="st-tile" disabled={!m.available} onClick={() => add(m.id, 1)}>
+            <button key={m.id} className={`st-tile${avoid.length ? ` avoid-${allergenConflict(m.allergens, avoid) === 'yes' ? 'yes' : allergenConflict(m.allergens, avoid) === 'unknown' ? 'unk' : 'no'}` : ''}`} disabled={!m.available} onClick={() => add(m.id, 1)}>
               <span className="st-tile-name">{m.name.it}</span>
+              <span className={`st-tile-all${m.allergens == null ? ' unk' : ''}`}>{allergenShort(m.allergens)}</span>
               <span className="st-tile-price tnum">{m.available ? money(m.price) : 'Esaurito'}</span>
               {cart[m.id] ? <i className="st-badge tnum">{cart[m.id]}</i> : null}
             </button>
@@ -58,6 +64,15 @@ export default function Pos({ mode, table, onSent, onCancel }: { mode: 'cashier'
           <label htmlFor="pos-note">Nota per la cucina</label>
           <input id="pos-note" value={note} onChange={e => setNote(e.target.value)} placeholder="Senza glutine, latte d’avena…" maxLength={300} />
         </div>
+        <details className="st-allergy">
+          <summary>Allergia o intolleranza del cliente{avoid.length ? ` (${avoid.length})` : ''}</summary>
+          <AllergenChips value={avoid} onChange={setAvoid} />
+        </details>
+        {risky.length > 0 && (
+          <div className="st-alert inline" role="alert">
+            <b>Attenzione:</b> {risky.map(({ l, c }) => c === 'yes' ? `${l.m.name.it} contiene ${allergenHits(l.m.allergens, avoid)}` : `${l.m.name.it}: allergeni non dichiarati, chiedi in cucina`).join(' · ')}
+          </div>
+        )}
         <ul className="st-lines ticket">
           {lines.length === 0 && <li className="st-empty">Tocca i prodotti per aggiungerli.</li>}
           {lines.map(l => (

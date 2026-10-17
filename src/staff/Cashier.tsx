@@ -3,7 +3,7 @@ import { api, type Order, type PayMethod } from '../api'
 import Pos from './Pos'
 import CashClose from './CashClose'
 import BookingsTab, { useBookings } from './BookingsTab'
-import { Availability, OrderHeader, money, pad, serveOrder, settleOrder, useNow, useOrders } from './shared'
+import { Availability, OrderHeader, OrderNote, money, pad, serveOrder, settleOrder, useNow, useOrders } from './shared'
 import { AlertsButton, useAlerts, useReadyReminder } from './alerts'
 
 type Tab = 'orders' | 'tables' | 'pos' | 'day' | 'book' | 'close' | 'out'
@@ -70,7 +70,7 @@ function OrdersTab({ orders, now, run }: { orders: Order[]; now: number; run: (f
         <ul className="st-lines compact">
           {o.items.map((i, k) => <li key={k}><b className="st-qty tnum">{i.qty}×</b><span>{i.name}</span><em className="tnum">{money(i.unit_price * i.qty)}</em></li>)}
         </ul>
-        {o.note && <div className="st-note"><b>Nota</b> {o.note}</div>}
+        {o.note && <OrderNote note={o.note} />}
         <div className="st-rowline">
           <span className={`st-pill ${o.status}`}>{STATUS_LABEL[o.status]}</span>
           <span className={`st-pill ${unpaid ? 'unpaid' : 'paid'}`}>{unpaid ? 'Da incassare' : `Pagato · ${PAY_LABEL[o.payment_method as PayMethod] || ''}`}</span>

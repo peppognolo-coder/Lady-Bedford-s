@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Order } from '../api'
-import { OrderHeader, money } from './shared'
+import { OrderHeader, OrderNote, money } from './shared'
 import type { Alerts } from './alerts'
 import { minsToSlot } from './shared'
 
@@ -37,7 +37,7 @@ export default function NewOrderPopup({ queue, orders, now, alerts, onStart, onD
         <ul className="st-lines">
           {cur.items.map((i, k) => <li key={k}><b className="st-qty tnum">{i.qty}×</b><span>{i.name}</span></li>)}
         </ul>
-        {cur.note && <div className="st-note"><b>Nota</b> {cur.note}</div>}
+        {cur.note && <OrderNote note={cur.note} />}
         <div className="st-hint">{total} {total === 1 ? 'prodotto' : 'prodotti'} · {money(cur.total)}</div>
         <div className="st-actions">
           <button ref={btn} className="st-act" onClick={() => onStart(cur)}>Inizia subito</button>
