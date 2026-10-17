@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
-import type { CleanFreq, EquipKind, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask, StaffCert, StaffMember } from '../api/types'
+import type { DocCategory, HaccpDocument, CleanFreq, EquipKind, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask, StaffCert, StaffMember } from '../api/types'
 import { isoDay } from '../booking'
 import { downloadCsv } from '../backup'
-import { CERT_LABEL, FREQ_LABEL, KIND_LABEL, certState, cleanDone, fmtDay, fmtHM, fmtTemp, parseTemp, slotStatus, useHaccp } from '../haccp'
+import { DOC_CAT, fmtSize, openDoc, CERT_LABEL, FREQ_LABEL, KIND_LABEL, certState, cleanDone, fmtDay, fmtHM, fmtTemp, parseTemp, slotStatus, useHaccp } from '../haccp'
 
-type Sec = 'oggi' | 'nc' | 'apparecchi' | 'pulizie' | 'attestati' | 'registro'
+type Sec = 'oggi' | 'nc' | 'apparecchi' | 'pulizie' | 'attestati' | 'documenti' | 'registro'
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
 const SLOT_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -18,7 +18,7 @@ export default function HaccpOwner() {
   if (error) return <div className="st-pane"><div className="st-alert" role="alert">{error}. Se è la prima volta, esegui lo script SQL supabase/sql/04_haccp.sql.</div></div>
   if (!data) return <div className="st-pane"><p className="st-hint">Caricamento…</p></div>
   const open = data.ncs.filter(n => n.status === 'aperta').length
-  const secs: [Sec, string][] = [['oggi', 'Oggi'], ['nc', `Non conformità${open ? ` (${open})` : ''}`], ['apparecchi', 'Frigo e soglie'], ['pulizie', 'Pulizie'], ['attestati', 'Attestati'], ['registro', 'Registro']]
+  const secs: [Sec, string][] = [['oggi', 'Oggi'], ['nc', `Non conformità${open ? ` (${open})` : ''}`], ['apparecchi', 'Frigo e soglie'], ['pulizie', 'Pulizie'], ['attestati', 'Attestati'], ['documenti', 'Documenti'], ['registro', 'Registro']]
   return (
     <div className="st-pane wide">
       <div className="st-chips" role="tablist">{secs.map(([id, l]) => <button key={id} role="tab" aria-selected={sec === id} onClick={() => setSec(id)}>{l}</button>)}</div>
@@ -28,6 +28,7 @@ export default function HaccpOwner() {
       {sec === 'apparecchi' && <Equipment list={data.equipment} run={run} />}
       {sec === 'pulizie' && <Tasks list={data.tasks} run={run} />}
       {sec === 'attestati' && <Certs />}
+      {sec === 'documenti' && <Documents />}
       {sec === 'registro' && <Register />}
     </div>
   )
@@ -239,6 +240,56 @@ function Register() {
           </tbody>
         </table></div>
       )}
+    </>
+  )
+}
+
+function Documents() {
+  const [docs, setDocs] = useState<HaccpDocument[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [showOld, setShowOld] = useState(false)
+  const [form, setForm] = useState(false)
+  const [title, setTitle] = useState(''), [cat, setCat] = useState<DocCategory>('piano'), [rev, setRev] = useState(''), [date, setDate] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(async () => { try { setDocs(await api.listHaccpDocuments()); setErr(null) } catch (e) { setErr((e as Error).message) } }, [])
+  useEffect(() => { void load(); return api.subscribe(() => { void load() }) }, [load])
+  const reset = () => { setForm(false); setTitle(''); setRev(''); setDate(''); setFile(null); setCat('piano') }
+  const save = async () => {
+    if (!title.trim()) return setErr('Scrivi il titolo.')
+    if (!file) return setErr('Scegli il file (PDF o foto).')
+    setBusy(true)
+    try { await api.addHaccpDocument({ title, category: cat, revision: rev || null, doc_date: date || null }, file); reset(); setErr(null); await load() } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+  }
+  const open = async (d: HaccpDocument) => { try { setErr(null); await openDoc(d) } catch (e) { setErr((e as Error).message) } }
+  const toggle = async (d: HaccpDocument) => { try { await api.setHaccpDocumentActive(d.id, !d.active); await load() } catch (e) { setErr((e as Error).message) } }
+  if (docs === null && !err) return <p className="st-hint">Carico…</p>
+  const list = (docs ?? []).filter(d => showOld || d.active)
+  return (
+    <>
+      {err && <div className="st-alert inline" role="alert">{err}</div>}
+      <div className="st-rowline"><button className="st-act" onClick={() => { setForm(true); setErr(null) }}>Carica documento</button>
+        <button className="st-act alt" onClick={() => setShowOld(v => !v)}>{showOld ? 'Nascondi archiviati' : 'Mostra archiviati'}</button></div>
+      {form && (
+        <section className="st-sheet"><h2 className="st-h3">Nuovo documento</h2>
+          <div className="st-form">
+            <div className="st-field"><label htmlFor="dt">Titolo</label><input id="dt" value={title} maxLength={120} onChange={e => setTitle(e.target.value)} placeholder="es. Piano di autocontrollo" /></div>
+            <div className="st-field"><label htmlFor="dc">Tipo</label><select id="dc" value={cat} onChange={e => setCat(e.target.value as DocCategory)}>{Object.entries(DOC_CAT).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+            <div className="st-field"><label htmlFor="dr">Revisione (facoltativa)</label><input id="dr" value={rev} maxLength={20} onChange={e => setRev(e.target.value)} placeholder="es. 0, 1, 2" /></div>
+            <div className="st-field"><label htmlFor="dd">Data del documento (facoltativa)</label><input id="dd" type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
+            <div className="st-field"><label htmlFor="df">File (PDF o foto, fino a 10 MB)</label><input id="df" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e => setFile(e.target.files?.[0] ?? null)} /></div>
+          </div>
+          <div className="st-actions"><button className="st-act" disabled={busy} onClick={save}>{busy ? 'Carico…' : 'Salva'}</button><button className="st-act alt" onClick={reset}>Annulla</button></div>
+        </section>
+      )}
+      <ul className="st-rows">
+        {list.length === 0 && <li className="st-empty">Nessun documento ancora. Carica il piano di autocontrollo firmato e le procedure.</li>}
+        {list.map(d => (
+          <li key={d.id} className="st-row"><div className="st-row-main"><div className="st-row-title">{d.title}<small>{DOC_CAT[d.category]}{d.revision ? ` · rev. ${d.revision}` : ''}{d.doc_date ? ` · ${fmtDay(d.doc_date)}` : ''} · {fmtSize(d.size)}</small></div>{!d.active && <div className="st-row-tags"><span className="st-pill">Archiviato</span></div>}</div>
+            <div className="st-row-tools"><button className="st-ghost" onClick={() => open(d)}>Apri</button><button className="st-ghost" onClick={() => toggle(d)}>{d.active ? 'Archivia' : 'Ripristina'}</button></div></li>
+        ))}
+      </ul>
+      <p className="st-hint">I documenti sono visibili alla cucina e alla proprietà. Un documento superato si archivia: non si cancella, così resta la storia delle revisioni.</p>
     </>
   )
 }

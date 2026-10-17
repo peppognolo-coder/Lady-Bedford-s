@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
-import type { HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask } from './api/types'
+import type { HaccpDocument, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask } from './api/types'
 import { isoDay } from './booking'
 
 export const KIND_LABEL: Record<string, string> = { frigo: 'Frigo', congelatore: 'Congelatore', abbattitore: 'Abbattitore', altro: 'Altro' }
@@ -33,6 +33,17 @@ export const certState = (expires: string, now = new Date()): CertState => {
 export const CERT_LABEL: Record<CertState, string> = { scaduto: 'Scaduto', in_scadenza: 'In scadenza', valido: 'Valido' }
 export const fmtDay = (d: string) => new Date(d + 'T12:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
 export const fmtHM = (iso: string) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+
+export const DOC_CAT: Record<string, string> = { piano: 'Piano di autocontrollo', procedura: 'Procedura', scheda: 'Scheda o etichetta', rapporto: 'Rapporto (ASL, disinfestazione, manutenzione)', altro: 'Altro' }
+export const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
+/** Apre un documento in una nuova scheda; la scheda si apre subito per non essere bloccata dal telefono. */
+export async function openDoc(doc: HaccpDocument) {
+  const w = window.open('', '_blank')
+  try {
+    const url = await api.haccpDocumentUrl(doc)
+    if (w) w.location.href = url; else window.location.href = url
+  } catch (e) { w?.close(); throw e }
+}
 
 export const OP_KEY = 'lb:haccp:op'
 export const loadOp = () => { try { return localStorage.getItem(OP_KEY) || '' } catch { return '' } }

@@ -4,7 +4,7 @@ import { DEFAULT_COSTS } from '../costs'
 import { EMPTY_CONTENT } from '../content'
 import { DEFAULT_BOOKING } from '../booking'
 import { withConfigDefaults } from '../shifts'
-import type { HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
+import type { HaccpDocument, HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
 import { startOfToday } from './types'
 
 const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
@@ -255,6 +255,16 @@ export function createSupabaseApi(url: string, key: string): Api {
     async listCertificates() { const { data, error } = await sb.from('staff_certificates').select('*').order('expires_on'); fail(error); return (data ?? []) as StaffCert[] },
     async saveCertificate(c) { const { error } = await sb.from('staff_certificates').upsert({ id: c.id, member_id: c.member_id, kind: c.kind.trim(), issued_on: c.issued_on || null, expires_on: c.expires_on, note: c.note?.trim() || null }); fail(error) },
     async deleteCertificate(id) { const { error } = await sb.from('staff_certificates').delete().eq('id', id); fail(error) },
+    async listHaccpDocuments() { const { data, error } = await sb.from('haccp_documents').select('*').order('category').order('title'); fail(error); return (data ?? []) as HaccpDocument[] },
+    async addHaccpDocument(meta, file) {
+      const ext = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+      const path = `${crypto.randomUUID()}.${ext}`
+      const up = await sb.storage.from('haccp-docs').upload(path, file, { contentType: file.type, cacheControl: '3600' }); fail(up.error)
+      const { error } = await sb.from('haccp_documents').insert({ title: meta.title.trim(), category: meta.category, revision: meta.revision?.trim() || null, doc_date: meta.doc_date || null, file_path: path, file_name: file.name.slice(0, 200), mime: file.type, size: file.size })
+      if (error) { void sb.storage.from('haccp-docs').remove([path]); fail(error) }
+    },
+    async setHaccpDocumentActive(id, active) { const { error } = await sb.from('haccp_documents').update({ active }).eq('id', id); fail(error) },
+    async haccpDocumentUrl(doc) { const { data, error } = await sb.storage.from('haccp-docs').createSignedUrl(doc.file_path, 300); fail(error); return data!.signedUrl },
     subscribe(cb) {
       // un canale per ogni ascoltatore: con lo stesso nome Supabase rifiuta il secondo (e la pagina diventa bianca)
       const ch = sb.channel(`lb-live-${++chanSeq}`)
@@ -269,6 +279,7 @@ export function createSupabaseApi(url: string, key: string): Api {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_cleaning_tasks' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_cleaning_logs' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_nonconformities' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_documents' }, cb)
         .subscribe()
       return () => { void sb.removeChannel(ch) }
     },

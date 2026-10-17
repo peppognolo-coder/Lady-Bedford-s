@@ -6,12 +6,12 @@ import { toDataUrl } from '../image'
 import { availability, checkBooking, DEFAULT_BOOKING } from '../booking'
 import { demoStaff } from '../demoStaff'
 import { withConfigDefaults } from '../shifts'
-import type { HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
+import type { HaccpDocument, HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
 
 // Modalità demo: tutto nel browser (localStorage), condiviso tra le schede dello stesso browser.
 const KEY = 'lb:demo:v2'
 const PINS: Record<Role, string> = { kitchen: '111111', cashier: '222222', waiter: '333333', owner: '44444444' }
-type Haccp = { equipment: HaccpEquipment[]; readings: HaccpReading[]; ncs: HaccpNc[]; tasks: HaccpTask[]; cleaning: HaccpCleanLog[]; certs: StaffCert[] }
+type Haccp = { equipment: HaccpEquipment[]; readings: HaccpReading[]; ncs: HaccpNc[]; tasks: HaccpTask[]; cleaning: HaccpCleanLog[]; certs: StaffCert[]; docs?: (HaccpDocument & { data: string })[] }
 type DB = { haccp?: Haccp; staff?: { members: StaffMember[]; shifts: Shift[]; config?: StaffConfig }; bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
 
 let mem: DB = { orders: [], seq: {}, catalog: DEFAULT_CATALOG, back: EMPTY_BACKOFFICE }
@@ -278,6 +278,16 @@ export function createLocalApi(): Api {
     async listCertificates() { return [...hc().certs].sort((a, b) => a.expires_on.localeCompare(b.expires_on)) },
     async saveCertificate(c) { putHc(h => ({ ...h, certs: upsert(h.certs, c) })) },
     async deleteCertificate(id) { putHc(h => ({ ...h, certs: h.certs.filter(c => c.id !== id) })) },
+    async listHaccpDocuments() { return (hc().docs ?? []).map(({ data: _d, ...d }) => d).sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title)) },
+    async addHaccpDocument(meta, file) {
+      if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Formato non valido: PDF o immagine.')
+      if (file.size > 1_500_000) throw new Error('In modalità demo il file può pesare al massimo 1,5 MB (nel cloud 10 MB).')
+      const data = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('File illeggibile')); r.readAsDataURL(file) })
+      const id = uid()
+      putHc(h => ({ ...h, docs: [...(h.docs ?? []), { id, title: meta.title.trim(), category: meta.category, revision: meta.revision?.trim() || null, doc_date: meta.doc_date || null, file_path: id, file_name: file.name, mime: file.type, size: file.size, active: true, created_at: new Date().toISOString(), data }] }))
+    },
+    async setHaccpDocumentActive(id, active) { putHc(h => ({ ...h, docs: (h.docs ?? []).map(d => (d.id === id ? { ...d, active } : d)) })) },
+    async haccpDocumentUrl(doc) { const d = (hc().docs ?? []).find(x => x.id === doc.id); if (!d) throw new Error('Documento non trovato'); return URL.createObjectURL(await (await fetch(d.data)).blob()) },
     subscribe(cb) { listeners.add(cb); return () => { listeners.delete(cb) } },
   }
 }

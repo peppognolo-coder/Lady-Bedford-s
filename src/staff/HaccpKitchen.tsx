@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { HaccpEquipment } from '../api/types'
+import type { HaccpDocument } from '../api/types'
+import { DOC_CAT, fmtSize, openDoc } from '../haccp'
 import { isoDay } from '../booking'
 import { KIND_LABEL, cleanDone, fmtHM, fmtTemp, loadOp, parseTemp, saveOp, slotStatus, useHaccp } from '../haccp'
 
@@ -9,7 +11,7 @@ export default function HaccpKitchen() {
   const { data, error, reload } = useHaccp()
   const [ops, setOps] = useState<{ id: string; name: string }[] | null>(null)
   const [op, setOp] = useState(loadOp())
-  const [view, setView] = useState<'temp' | 'clean'>('temp')
+  const [view, setView] = useState<'temp' | 'clean' | 'docs'>('temp')
   const [sheet, setSheet] = useState<HaccpEquipment | null>(null)
   const [val, setVal] = useState('')
   const [action, setAction] = useState('')
@@ -59,6 +61,7 @@ export default function HaccpKitchen() {
       <div className="st-chips" role="tablist">
         <button role="tab" aria-selected={view === 'temp'} onClick={() => setView('temp')}>Temperature</button>
         <button role="tab" aria-selected={view === 'clean'} onClick={() => setView('clean')}>Pulizie</button>
+        <button role="tab" aria-selected={view === 'docs'} onClick={() => setView('docs')}>Documenti</button>
       </div>
 
       {view === 'temp' && (
@@ -101,6 +104,8 @@ export default function HaccpKitchen() {
         </>
       )}
 
+      {view === 'docs' && <KitchenDocs onError={setErr} />}
+
       {view === 'clean' && (
         tasks.length === 0 ? <div className="st-empty big">Nessun compito di pulizia inserito.<br /><small style={{ fontSize: 14 }}>La proprietà li aggiunge in Proprietà → HACCP.</small></div> : (
           <ul className="st-rows">
@@ -120,5 +125,23 @@ export default function HaccpKitchen() {
         )
       )}
     </div>
+  )
+}
+
+function KitchenDocs({ onError }: { onError: (m: string | null) => void }) {
+  const [docs, setDocs] = useState<HaccpDocument[] | null>(null)
+  useEffect(() => {
+    const load = () => api.listHaccpDocuments().then(d => setDocs(d.filter(x => x.active))).catch(e => { setDocs([]); onError((e as Error).message) })
+    void load(); return api.subscribe(() => { void load() })
+  }, [onError])
+  if (!docs) return <p className="st-hint">Caricamento…</p>
+  if (!docs.length) return <div className="st-empty big">Nessun documento ancora.<br /><small style={{ fontSize: 14 }}>La proprietà carica qui il piano di autocontrollo e le procedure.</small></div>
+  return (
+    <ul className="st-rows">
+      {docs.map(d => (
+        <li key={d.id} className="st-row"><div className="st-row-main"><div className="st-row-title">{d.title}<small>{DOC_CAT[d.category]}{d.revision ? ` · rev. ${d.revision}` : ''} · {fmtSize(d.size)}</small></div></div>
+          <div className="st-row-tools"><button className="st-ghost" onClick={async () => { try { onError(null); await openDoc(d) } catch (e) { onError((e as Error).message) } }}>Apri</button></div></li>
+      ))}
+    </ul>
   )
 }

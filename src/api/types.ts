@@ -143,6 +143,10 @@ export interface HaccpTask { id: string; area: string; name: string; frequency: 
 export interface HaccpCleanLog { id: string; task_id: string; task_name: string; area: string; day: string; at: string; operator: string; note: string | null }
 export interface StaffCert { id: string; member_id: string; kind: string; issued_on: string | null; expires_on: string; note: string | null }
 
+export type DocCategory = 'piano' | 'procedura' | 'scheda' | 'rapporto' | 'altro'
+export interface HaccpDocument { id: string; title: string; category: DocCategory; revision: string | null; doc_date: string | null; file_path: string; file_name: string; mime: string; size: number; active: boolean; created_at: string }
+export interface NewHaccpDocument { title: string; category: DocCategory; revision: string | null; doc_date: string | null }
+
 export interface Closure {
   day: string                // 'AAAA-MM-GG'
   float_start: number        // fondo cassa a inizio giornata
@@ -236,6 +240,11 @@ export interface Api {
   listCertificates(): Promise<StaffCert[]>
   saveCertificate(c: StaffCert): Promise<void>
   deleteCertificate(id: string): Promise<void>
+  listHaccpDocuments(): Promise<HaccpDocument[]>
+  addHaccpDocument(meta: NewHaccpDocument, file: File): Promise<void>
+  setHaccpDocumentActive(id: string, active: boolean): Promise<void>
+  /** Indirizzo temporaneo per aprire il file (nel cloud scade dopo pochi minuti). */
+  haccpDocumentUrl(doc: HaccpDocument): Promise<string>
   subscribe(cb: () => void): () => void
 }
 
