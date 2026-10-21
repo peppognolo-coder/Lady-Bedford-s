@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
-import type { HaccpDocument, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask } from './api/types'
+import type { HaccpBlast, HaccpDocument, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask } from './api/types'
 import { isoDay } from './booking'
 
 export const KIND_LABEL: Record<string, string> = { frigo: 'Frigo', congelatore: 'Congelatore', abbattitore: 'Abbattitore', altro: 'Altro' }
@@ -49,7 +49,7 @@ export const OP_KEY = 'lb:haccp:op'
 export const loadOp = () => { try { return localStorage.getItem(OP_KEY) || '' } catch { return '' } }
 export const saveOp = (n: string) => { try { localStorage.setItem(OP_KEY, n) } catch { /* ignore */ } }
 
-export interface HaccpData { equipment: HaccpEquipment[]; tasks: HaccpTask[]; today: HaccpReading[]; cleaning: HaccpCleanLog[]; ncs: HaccpNc[] }
+export interface HaccpData { equipment: HaccpEquipment[]; tasks: HaccpTask[]; today: HaccpReading[]; blasts: HaccpBlast[]; cleaning: HaccpCleanLog[]; ncs: HaccpNc[] }
 
 /** Dati HACCP di oggi (e del periodo di pulizie), riletti a ogni cambiamento. */
 export function useHaccp() {
@@ -59,8 +59,8 @@ export function useHaccp() {
     try {
       const now = new Date(), t = isoDay(now)
       const from = [periodStart('mensile', now), periodStart('settimanale', now)].sort()[0]
-      const [equipment, tasks, today, cleaning, ncs] = await Promise.all([api.listHaccpEquipment(), api.listHaccpTasks(), api.listHaccpReadings(t, t), api.listHaccpCleaning(from, t), api.listHaccpNcs()])
-      setData({ equipment, tasks, today, cleaning, ncs }); setError(null)
+      const [equipment, tasks, today, blasts, cleaning, ncs] = await Promise.all([api.listHaccpEquipment(), api.listHaccpTasks(), api.listHaccpReadings(t, t), api.listHaccpBlasts(t, t), api.listHaccpCleaning(from, t), api.listHaccpNcs()])
+      setData({ equipment, tasks, today, blasts, cleaning, ncs }); setError(null)
     } catch (e) { setError((e as Error).message) }
   }, [])
   useEffect(() => { void reload(); return api.subscribe(() => { void reload() }) }, [reload])

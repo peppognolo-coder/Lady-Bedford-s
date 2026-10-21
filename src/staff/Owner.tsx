@@ -82,6 +82,7 @@ function MenuTab({ menu, cats, settings, save }: { menu: MenuItem[]; cats: Categ
   const [edit, setEdit] = useState<MenuItem | null>(null)
   const [isNew, setIsNew] = useState(false)
   const list = sortMenu(menu).filter(m => m.cat === cat)
+  const undeclared = menu.filter(m => m.visible && m.allergens == null)
 
   const move = (i: number, d: -1 | 1) => {
     const a = list[i], b = list[i + d]; if (!a || !b) return
@@ -98,6 +99,7 @@ function MenuTab({ menu, cats, settings, save }: { menu: MenuItem[]; cats: Categ
       <div className="st-rowline">
         <Switch on={!!settings.show_product_photos} onChange={v => void save(() => api.saveSettings({ ...settings, show_product_photos: v }), v ? 'Foto prodotti attivate' : 'Foto prodotti disattivate')} label="Mostra le foto dei prodotti nell’app dei clienti" />
       </div>
+      {undeclared.length > 0 && <div className="st-alert inline" role="status"><b>Allergeni non dichiarati su {undeclared.length} prodotti visibili:</b> {undeclared.slice(0, 6).map(m => m.name.it).join(', ')}{undeclared.length > 6 ? '…' : ''}. Aprili e attiva “Allergeni verificati e dichiarati”: finché non lo fai, l’app non può informare il cliente.</div>}
       {edit && <MenuForm key={edit.id || 'new'} item={edit} cats={cats} isNew={isNew} onCancel={() => setEdit(null)} onSave={async m => { if (await save(() => api.saveMenuItem(m))) setEdit(null) }} onDelete={async () => { if (await save(() => api.deleteMenuItems([edit.id]), 'Prodotto eliminato')) setEdit(null) }} />}
       <ul className="st-rows">
         {cats.length === 0 && <li className="st-empty">Crea prima una categoria dalla scheda “Categorie”.</li>}

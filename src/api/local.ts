@@ -6,12 +6,12 @@ import { toDataUrl } from '../image'
 import { availability, checkBooking, DEFAULT_BOOKING } from '../booking'
 import { demoStaff } from '../demoStaff'
 import { withConfigDefaults } from '../shifts'
-import type { HaccpDocument, HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
+import type { HaccpBlast, HaccpDocument, HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingPublic, BookingStatus, Closure, Api, Backoffice, Catalog, MenuItem, MoveReason, NewOrder, Order, Role, Status } from './types'
 
 // Modalità demo: tutto nel browser (localStorage), condiviso tra le schede dello stesso browser.
 const KEY = 'lb:demo:v2'
 const PINS: Record<Role, string> = { kitchen: '111111', cashier: '222222', waiter: '333333', owner: '44444444' }
-type Haccp = { equipment: HaccpEquipment[]; readings: HaccpReading[]; ncs: HaccpNc[]; tasks: HaccpTask[]; cleaning: HaccpCleanLog[]; certs: StaffCert[]; docs?: (HaccpDocument & { data: string })[] }
+type Haccp = { equipment: HaccpEquipment[]; readings: HaccpReading[]; ncs: HaccpNc[]; tasks: HaccpTask[]; cleaning: HaccpCleanLog[]; certs: StaffCert[]; docs?: (HaccpDocument & { data: string })[]; blasts?: HaccpBlast[] }
 type DB = { haccp?: Haccp; staff?: { members: StaffMember[]; shifts: Shift[]; config?: StaffConfig }; bookings?: Booking[]; closures?: Closure[]; pins?: Partial<Record<Role, string>>; orders: Order[]; seq: Record<string, number>; catalog: Catalog; back?: Backoffice }
 
 let mem: DB = { orders: [], seq: {}, catalog: DEFAULT_CATALOG, back: EMPTY_BACKOFFICE }
@@ -76,6 +76,7 @@ const demoHaccp = (): Haccp => ({
     { id: 'eq1', name: 'Frigo dolci', kind: 'frigo', temp_min: 0, temp_max: 4, slots: ['09:00', '17:00'], active: true, sort: 1 },
     { id: 'eq2', name: 'Frigo cucina', kind: 'frigo', temp_min: 0, temp_max: 4, slots: ['09:00', '17:00'], active: true, sort: 2 },
     { id: 'eq3', name: 'Congelatore', kind: 'congelatore', temp_min: -24, temp_max: -18, slots: ['09:00'], active: true, sort: 3 },
+    { id: 'eq4', name: 'Abbattitore', kind: 'abbattitore', temp_min: -40, temp_max: 10, slots: [], active: true, sort: 4 },
   ],
   readings: [], ncs: [], cleaning: [], certs: [],
   tasks: [
@@ -278,6 +279,20 @@ export function createLocalApi(): Api {
     async listCertificates() { return [...hc().certs].sort((a, b) => a.expires_on.localeCompare(b.expires_on)) },
     async saveCertificate(c) { putHc(h => ({ ...h, certs: upsert(h.certs, c) })) },
     async deleteCertificate(id) { putHc(h => ({ ...h, certs: h.certs.filter(c => c.id !== id) })) },
+    async listHaccpBlasts(from, to) { return (hc().blasts ?? []).filter(b => b.day >= from && b.day <= to).sort((a, b) => b.at.localeCompare(a.at)) },
+    async logBlast(equipmentId, mode, product, startTemp, endTemp, minutes, action, operator) {
+      const e = hc().equipment.find(x => x.id === equipmentId)
+      if (!e || !e.active || e.kind !== 'abbattitore') throw new Error('Abbattitore sconosciuto')
+      if (!product.trim()) throw new Error('Scrivi che prodotto è')
+      if (!operator.trim()) throw new Error('Scegli chi sei')
+      if (!(minutes >= 1 && minutes <= 1440)) throw new Error('Durata non valida')
+      const limT = mode === 'positivo' ? 10 : -18, limM = mode === 'positivo' ? 90 : 240
+      const ok = endTemp <= limT && minutes <= limM
+      if (!ok && !action?.trim()) throw new Error('Fuori limite: scrivi l’azione correttiva')
+      const b: HaccpBlast = { id: uid(), day: isoToday(), at: new Date().toISOString(), equipment_id: e.id, equipment_name: e.name, mode, product: product.trim(), start_temp: startTemp, end_temp: endTemp, minutes, limit_temp: limT, limit_minutes: limM, in_range: ok, corrective_action: action?.trim() || null, operator: operator.trim() }
+      putHc(h => ({ ...h, blasts: [...(h.blasts ?? []), b], ncs: ok ? h.ncs : [...h.ncs, { id: uid(), opened_at: b.at, source: 'abbattitore', source_id: b.id, description: `${e.name} (${b.product}): ${endTemp} °C in ${minutes} min (limite ${limT} °C in ${limM} min)`, status: 'aperta', cause: null, resolution: null, closed_at: null }] }))
+      return { id: b.id, in_range: ok }
+    },
     async listHaccpDocuments() { return (hc().docs ?? []).map(({ data: _d, ...d }) => d).sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title)) },
     async addHaccpDocument(meta, file) {
       if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Formato non valido: PDF o immagine.')

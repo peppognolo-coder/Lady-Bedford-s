@@ -4,7 +4,7 @@ import { DEFAULT_COSTS } from '../costs'
 import { EMPTY_CONTENT } from '../content'
 import { DEFAULT_BOOKING } from '../booking'
 import { withConfigDefaults } from '../shifts'
-import type { HaccpDocument, HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
+import type { HaccpBlast, HaccpDocument, HaccpEquipment, HaccpReading, HaccpNc, HaccpTask, HaccpCleanLog, StaffCert, Shift, StaffConfig, StaffMember, Booking, BookingConfig, BookingPublic, Closure, Api, Backoffice, Catalog, Costs, Ingredient, Recipe, StockMove, MenuItem, NewOrder, Order, Role, Service, Settings, Content } from './types'
 import { startOfToday } from './types'
 
 const staffEmail = (role: Role) => `${role}@staff.ladybedford.app`
@@ -255,6 +255,11 @@ export function createSupabaseApi(url: string, key: string): Api {
     async listCertificates() { const { data, error } = await sb.from('staff_certificates').select('*').order('expires_on'); fail(error); return (data ?? []) as StaffCert[] },
     async saveCertificate(c) { const { error } = await sb.from('staff_certificates').upsert({ id: c.id, member_id: c.member_id, kind: c.kind.trim(), issued_on: c.issued_on || null, expires_on: c.expires_on, note: c.note?.trim() || null }); fail(error) },
     async deleteCertificate(id) { const { error } = await sb.from('staff_certificates').delete().eq('id', id); fail(error) },
+    async listHaccpBlasts(from, to) { const { data, error } = await sb.from('haccp_blast_cycles').select('*').gte('day', from).lte('day', to).order('at', { ascending: false }).limit(500); fail(error); return (data ?? []).map((r: any) => ({ ...r, start_temp: num(r.start_temp), end_temp: num(r.end_temp), limit_temp: num(r.limit_temp) })) as HaccpBlast[] },
+    async logBlast(equipmentId, mode, product, startTemp, endTemp, minutes, action, operator) {
+      const { data, error } = await sb.rpc('haccp_log_blast', { p_equipment: equipmentId, p_mode: mode, p_product: product, p_start_temp: startTemp, p_end_temp: endTemp, p_minutes: minutes, p_action: action, p_operator: operator }); fail(error)
+      return data as { id: string; in_range: boolean }
+    },
     async listHaccpDocuments() { const { data, error } = await sb.from('haccp_documents').select('*').order('category').order('title'); fail(error); return (data ?? []) as HaccpDocument[] },
     async addHaccpDocument(meta, file) {
       const ext = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
@@ -280,6 +285,7 @@ export function createSupabaseApi(url: string, key: string): Api {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_cleaning_logs' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_nonconformities' }, cb)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_documents' }, cb)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_blast_cycles' }, cb)
         .subscribe()
       return () => { void sb.removeChannel(ch) }
     },

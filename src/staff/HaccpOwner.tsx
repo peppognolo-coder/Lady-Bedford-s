@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
-import type { DocCategory, HaccpDocument, CleanFreq, EquipKind, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask, StaffCert, StaffMember } from '../api/types'
+import type { HaccpBlast, DocCategory, HaccpDocument, CleanFreq, EquipKind, HaccpCleanLog, HaccpEquipment, HaccpNc, HaccpReading, HaccpTask, StaffCert, StaffMember } from '../api/types'
 import { isoDay } from '../booking'
+import { useCatalog } from '../catalog'
 import { downloadCsv } from '../backup'
 import { DOC_CAT, fmtSize, openDoc, CERT_LABEL, FREQ_LABEL, KIND_LABEL, certState, cleanDone, fmtDay, fmtHM, fmtTemp, parseTemp, slotStatus, useHaccp } from '../haccp'
 
@@ -39,6 +40,9 @@ function Today({ data, go }: { data: ReturnType<typeof useHaccp>['data'] & objec
   const daily = tasks.filter(t => t.frequency === 'giornaliera')
   const missing = eqs.map(e => ({ e, st: slotStatus(e, data.today) })).filter(x => x.st.missing > 0)
   const outs = data.today.filter(r => !r.in_range)
+  const blastsToday = data.blasts
+  const { catalog } = useCatalog()
+  const undeclared = catalog.menu.filter(m => m.visible && m.allergens == null)
   const open = data.ncs.filter(n => n.status === 'aperta')
   const todo = tasks.filter(t => !cleanDone(t, data.cleaning))
   const dailyDone = daily.filter(t => cleanDone(t, data.cleaning)).length
@@ -55,11 +59,13 @@ function Today({ data, go }: { data: ReturnType<typeof useHaccp>['data'] & objec
           {!eqs.length && <li className="st-empty">Nessun apparecchio.</li>}
         </ul>
         {outs.length > 0 && <p className="st-hint">Fuori soglia oggi: {outs.length}.</p>}
+        {blastsToday.length > 0 && <p className="st-hint">Cicli abbattitore oggi: {blastsToday.length}{blastsToday.some(b => !b.in_range) ? `, di cui fuori limite ${blastsToday.filter(b => !b.in_range).length}` : ''}.</p>}
       </section>
       <section className="st-sheet"><h2 className="st-h3">Pulizie</h2>
         <p className="st-hint">Giornaliere fatte: {dailyDone} su {daily.length}. Da fare in questo periodo: {todo.length}.</p>
         {todo.length > 0 && <ul className="st-rows">{todo.map(t => <li key={t.id} className="st-row"><div className="st-row-main"><div className="st-row-title">{t.name}<small>{t.area} · {t.frequency}</small></div></div></li>)}</ul>}
       </section>
+      {undeclared.length > 0 && <section className="st-sheet"><h2 className="st-h3">Allergeni non dichiarati: {undeclared.length} prodotti</h2><p className="st-hint">{undeclared.slice(0, 8).map(m => m.name.it).join(', ')}{undeclared.length > 8 ? '…' : ''}. Si completano in Menu e prezzi.</p></section>}
       <section className="st-sheet"><h2 className="st-h3">Non conformità aperte: {open.length}</h2>
         {open.length > 0 && <button className="st-ghost" onClick={() => go('nc')}>Vai a chiuderle</button>}
       </section>
@@ -116,7 +122,7 @@ function Equipment({ list, run }: { list: HaccpEquipment[]; run: (f: () => Promi
             <div className="st-field"><label htmlFor="en">Nome</label><input id="en" value={f.name} maxLength={60} onChange={x => setF({ ...f, name: x.target.value })} placeholder="es. Frigo dolci" /></div>
             <div className="st-field"><label htmlFor="ek">Tipo</label><select id="ek" value={f.kind} onChange={x => setF({ ...f, kind: x.target.value as EquipKind })}>{Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
             <div className="st-field"><label htmlFor="emn">Minimo (°C)</label><input id="emn" inputMode="decimal" value={mn} onChange={x => setMn(x.target.value)} /></div>
-            <div className="st-field"><label htmlFor="emx">Massimo (°C)</label><input id="emx" inputMode="decimal" value={mx} onChange={x => setMx(x.target.value)} /><small>Frigo di solito 0 / 4, congelatore −24 / −18.</small></div>
+            <div className="st-field"><label htmlFor="emx">Massimo (°C)</label><input id="emx" inputMode="decimal" value={mx} onChange={x => setMx(x.target.value)} /><small>Frigo di solito 0 / 4, congelatore −24 / −18. Per l’abbattitore soglie e orari non contano: la cucina registra i cicli con il tempo.</small></div>
             <div className="st-field"><label htmlFor="es">Orari delle rilevazioni</label><input id="es" value={sl} onChange={x => setSl(x.target.value)} placeholder="09:00, 17:00" /></div>
           </div>
           <div className="st-actions"><button className="st-act" onClick={submit}>Salva</button><button className="st-act alt" onClick={() => setF(null)}>Annulla</button></div>
@@ -216,10 +222,11 @@ function Register() {
   const [days, setDays] = useState(30)
   const [reads, setReads] = useState<HaccpReading[] | null>(null)
   const [cl, setCl] = useState<HaccpCleanLog[]>([])
+  const [bl, setBl] = useState<HaccpBlast[]>([])
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
     const to = new Date(), from = new Date(); from.setDate(from.getDate() - days)
-    Promise.all([api.listHaccpReadings(isoDay(from), isoDay(to)), api.listHaccpCleaning(isoDay(from), isoDay(to))]).then(([r, c]) => { setReads(r); setCl(c) }).catch(e => setErr((e as Error).message))
+    Promise.all([api.listHaccpReadings(isoDay(from), isoDay(to)), api.listHaccpCleaning(isoDay(from), isoDay(to)), api.listHaccpBlasts(isoDay(from), isoDay(to))]).then(([r, c, b]) => { setReads(r); setCl(c); setBl(b) }).catch(e => setErr((e as Error).message))
   }, [days])
   return (
     <>
@@ -227,6 +234,7 @@ function Register() {
         <div className="st-chips">{[7, 30, 90].map(d => <button key={d} role="tab" aria-selected={days === d} onClick={() => setDays(d)}>{d} giorni</button>)}</div>
         <div className="st-rowline">
           <button className="st-act alt" disabled={!reads?.length} onClick={() => downloadCsv('haccp-temperature.csv', ['Giorno', 'Ora', 'Apparecchio', 'Temperatura °C', 'Minimo', 'Massimo', 'In soglia', 'Azione correttiva', 'Operatore'], reads!.map(r => [r.day, fmtHM(r.at), r.equipment_name, r.value, r.limit_min, r.limit_max, r.in_range ? 'sì' : 'NO', r.corrective_action, r.operator]))}>Temperature (CSV)</button>
+          <button className="st-act alt" disabled={!bl.length} onClick={() => downloadCsv('haccp-abbattitore.csv', ['Giorno', 'Ora', 'Apparecchio', 'Ciclo', 'Prodotto', 'Temp. inizio °C', 'Temp. fine °C', 'Minuti', 'Limite', 'In limite', 'Azione correttiva', 'Operatore'], bl.map(b => [b.day, fmtHM(b.at), b.equipment_name, b.mode, b.product, b.start_temp, b.end_temp, b.minutes, `${b.limit_temp} °C in ${b.limit_minutes} min`, b.in_range ? 'sì' : 'NO', b.corrective_action, b.operator]))}>Abbattitore (CSV)</button>
           <button className="st-act alt" disabled={!cl.length} onClick={() => downloadCsv('haccp-pulizie.csv', ['Giorno', 'Ora', 'Zona', 'Compito', 'Operatore', 'Nota'], cl.map(c => [c.day, fmtHM(c.at), c.area, c.task_name, c.operator, c.note]))}>Pulizie (CSV)</button>
         </div>
       </div>
@@ -239,6 +247,15 @@ function Register() {
             {reads?.map(r => <tr key={r.id}><td>{fmtDay(r.day)} {fmtHM(r.at)}</td><td>{r.equipment_name}</td><td className="r tnum">{fmtTemp(r.value)}</td><td style={r.in_range ? undefined : { color: '#a33', fontWeight: 600 }}>{r.in_range ? 'ok' : `fuori soglia${r.corrective_action ? `: ${r.corrective_action}` : ''}`}</td><td>{r.operator}</td></tr>)}
           </tbody>
         </table></div>
+      )}
+      {bl.length > 0 && (
+        <>
+          <h2 className="st-h3">Cicli dell’abbattitore</h2>
+          <div className="st-tablewrap"><table className="st-table">
+            <thead><tr><th>Giorno</th><th>Prodotto</th><th className="r">Fine</th><th className="r">Minuti</th><th>Esito</th><th>Chi</th></tr></thead>
+            <tbody>{bl.map(b => <tr key={b.id}><td>{fmtDay(b.day)} {fmtHM(b.at)}</td><td>{b.product} ({b.mode})</td><td className="r tnum">{fmtTemp(b.end_temp)}</td><td className="r tnum">{b.minutes}</td><td style={b.in_range ? undefined : { color: '#a33', fontWeight: 600 }}>{b.in_range ? 'ok' : `fuori limite${b.corrective_action ? `: ${b.corrective_action}` : ''}`}</td><td>{b.operator}</td></tr>)}</tbody>
+          </table></div>
+        </>
       )}
     </>
   )

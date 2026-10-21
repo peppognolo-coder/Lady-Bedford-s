@@ -143,6 +143,9 @@ export interface HaccpTask { id: string; area: string; name: string; frequency: 
 export interface HaccpCleanLog { id: string; task_id: string; task_name: string; area: string; day: string; at: string; operator: string; note: string | null }
 export interface StaffCert { id: string; member_id: string; kind: string; issued_on: string | null; expires_on: string; note: string | null }
 
+export type BlastMode = 'positivo' | 'negativo'
+export interface HaccpBlast { id: string; day: string; at: string; equipment_id: string | null; equipment_name: string; mode: BlastMode; product: string; start_temp: number; end_temp: number; minutes: number; limit_temp: number; limit_minutes: number; in_range: boolean; corrective_action: string | null; operator: string }
+
 export type DocCategory = 'piano' | 'procedura' | 'scheda' | 'rapporto' | 'altro'
 export interface HaccpDocument { id: string; title: string; category: DocCategory; revision: string | null; doc_date: string | null; file_path: string; file_name: string; mime: string; size: number; active: boolean; created_at: string }
 export interface NewHaccpDocument { title: string; category: DocCategory; revision: string | null; doc_date: string | null }
@@ -240,6 +243,8 @@ export interface Api {
   listCertificates(): Promise<StaffCert[]>
   saveCertificate(c: StaffCert): Promise<void>
   deleteCertificate(id: string): Promise<void>
+  listHaccpBlasts(from: string, to: string): Promise<HaccpBlast[]>
+  logBlast(equipmentId: string, mode: BlastMode, product: string, startTemp: number, endTemp: number, minutes: number, action: string | null, operator: string): Promise<{ id: string; in_range: boolean }>
   listHaccpDocuments(): Promise<HaccpDocument[]>
   addHaccpDocument(meta: NewHaccpDocument, file: File): Promise<void>
   setHaccpDocumentActive(id: string, active: boolean): Promise<void>
